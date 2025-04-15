@@ -1910,6 +1910,9 @@ enum StmtCode {
   // CUDA
   EXPR_CUDA_KERNEL_CALL, // CUDAKernelCallExpr
 
+  // DRAI
+  EXPR_DRAI_KERNEL_CALL, // DRAIKernelCallExpr
+
   // OpenCL
   EXPR_ASTYPE, // AsTypeExpr
 

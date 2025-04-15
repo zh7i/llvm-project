@@ -1308,6 +1308,16 @@ public:
   void ProcessODRHash(llvm::FoldingSetNodeID &ID, ODRHash& Hash) const;
 };
 
+// for target drai
+class SupportSimdBranch {
+public:
+  bool IsSimdBranch() const { return is_simd_branch_; }
+  void SetSimdBranch(bool is_simd) { is_simd_branch_ = is_simd; }
+
+private:
+  bool is_simd_branch_ = false;
+};
+
 /// DeclStmt - Adaptor class for mixing declarations with statements and
 /// expressions. For example, CompoundStmt mixes statements, expressions
 /// and declarations (variables, types). Another example is ForStmt, where
@@ -1951,7 +1961,8 @@ public:
 /// IfStmt - This represents an if/then/else.
 class IfStmt final
     : public Stmt,
-      private llvm::TrailingObjects<IfStmt, Stmt *, SourceLocation> {
+      private llvm::TrailingObjects<IfStmt, Stmt *, SourceLocation>,
+      public SupportSimdBranch {
   friend TrailingObjects;
 
   // IfStmt is followed by several trailing objects, some of which optional.
@@ -2538,7 +2549,7 @@ public:
 };
 
 /// DoStmt - This represents a 'do/while' stmt.
-class DoStmt : public Stmt {
+class DoStmt : public Stmt, public SupportSimdBranch {
   enum { BODY, COND, END_EXPR };
   Stmt *SubExprs[END_EXPR];
   SourceLocation WhileLoc;
@@ -2594,7 +2605,7 @@ public:
 /// ForStmt - This represents a 'for (init;cond;inc)' stmt.  Note that any of
 /// the init/cond/inc parts of the ForStmt will be null if they were not
 /// specified in the source.
-class ForStmt : public Stmt {
+class ForStmt : public Stmt, public SupportSimdBranch {
   friend class ASTStmtReader;
 
   enum { INIT, CONDVAR, COND, INC, BODY, END_EXPR };
@@ -2763,7 +2774,7 @@ public:
 };
 
 /// ContinueStmt - This represents a continue.
-class ContinueStmt : public Stmt {
+class ContinueStmt : public Stmt, public SupportSimdBranch {
 public:
   ContinueStmt(SourceLocation CL) : Stmt(ContinueStmtClass) {
     setContinueLoc(CL);
@@ -2793,7 +2804,7 @@ public:
 };
 
 /// BreakStmt - This represents a break.
-class BreakStmt : public Stmt {
+class BreakStmt : public Stmt, public SupportSimdBranch {
 public:
   BreakStmt(SourceLocation BL) : Stmt(BreakStmtClass) {
     setBreakLoc(BL);

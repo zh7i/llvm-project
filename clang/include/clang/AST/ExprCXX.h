@@ -264,6 +264,42 @@ public:
   }
 };
 
+// for target drai
+class DRAIKernelCallExpr final : public CallExpr {
+  friend class ASTStmtReader;
+
+  enum { CONFIG, END_PREARG };
+
+  DRAIKernelCallExpr(Expr *Fn, InitListExpr *Config, ArrayRef<Expr *> Args,
+                     QualType Ty, ExprValueKind VK, SourceLocation RP,
+                     FPOptionsOverride FPFeatures, unsigned MinNumArgs);
+
+  DRAIKernelCallExpr(unsigned NumArgs, bool HasFPFeatures, EmptyShell Empty);
+
+public:
+  static DRAIKernelCallExpr *Create(const ASTContext &Ctx, Expr *Fn,
+                                    InitListExpr *Config, ArrayRef<Expr *> Args,
+                                    QualType Ty, ExprValueKind VK,
+                                    SourceLocation RP,
+                                    FPOptionsOverride FPFeatures,
+                                    unsigned MinNumArgs = 0);
+
+  static DRAIKernelCallExpr *CreateEmpty(const ASTContext &Ctx,
+                                         unsigned NumArgs, bool HasFPFeatures,
+                                         EmptyShell Empty);
+
+  const InitListExpr *getConfig() const {
+    return cast_or_null<InitListExpr>(getPreArg(CONFIG));
+  }
+  InitListExpr *getConfig() {
+    return cast_or_null<InitListExpr>(getPreArg(CONFIG));
+  }
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == DRAIKernelCallExprClass;
+  }
+};
+
 /// A rewritten comparison expression that was originally written using
 /// operator syntax.
 ///

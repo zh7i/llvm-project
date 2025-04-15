@@ -3350,6 +3350,23 @@ void CodeGenModule::EmitGlobal(GlobalDecl GD) {
     }
   }
 
+  // for target drai
+  if (LangOpts.DRAI) {
+    if (!LangOpts.DRAIIsDevice) {
+      llvm_unreachable("drai codegen only support drai-is-device mode");
+    }
+    if (!Global->hasAttr<DRAIDeviceAttr>() &&
+        !Global->hasAttr<DRAIGlobalAttr>()) {
+      if (Global->getIdentifier()) {
+        llvm::dbgs() << "skip global decl: " << Global->getName() << " "
+                     << LangOpts.DRAIIsDevice << " "
+                     << Global->hasAttr<DRAIDeviceAttr>() << " "
+                     << Global->hasAttr<DRAIGlobalAttr>() << "\n";
+      }
+      return;
+    }
+  }
+
   if (LangOpts.OpenMP) {
     // If this is OpenMP, check if it is legal to emit this global normally.
     if (OpenMPRuntime && OpenMPRuntime->emitTargetGlobal(GD))

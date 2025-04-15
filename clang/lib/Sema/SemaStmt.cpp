@@ -33,6 +33,7 @@
 #include "clang/Sema/Scope.h"
 #include "clang/Sema/ScopeInfo.h"
 #include "clang/Sema/SemaInternal.h"
+#include "clang/Sema/SimdBranchVisitor.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
@@ -960,9 +961,14 @@ StmtResult Sema::BuildIfStmt(SourceLocation IfLoc,
       isa<ObjCAvailabilityCheckExpr>(Cond.get().second))
     setFunctionHasBranchProtectedScope();
 
-  return IfStmt::Create(Context, IfLoc, StatementKind, InitStmt,
-                        Cond.get().first, Cond.get().second, LParenLoc,
-                        RParenLoc, thenStmt, ElseLoc, elseStmt);
+  IfStmt *result = IfStmt::Create(
+      Context, IfLoc, StatementKind, InitStmt, Cond.get().first,
+      Cond.get().second, LParenLoc, RParenLoc, thenStmt, ElseLoc, elseStmt);
+  // for target drai
+  if (getLangOpts().DRAI && getLangOpts().SIMDBranch) {
+    SimdBranchVisitor(*this).Visit(result);
+  }
+  return result;
 }
 
 namespace {
@@ -1708,7 +1714,15 @@ Sema::ActOnDoStmt(SourceLocation DoLoc, Stmt *Body,
   assert(Cond && "ActOnDoStmt(): missing expression");
 
   CheckBreakContinueBinding(Cond);
-  ExprResult CondResult = CheckBooleanCondition(DoLoc, Cond);
+  ExprResult CondResult;
+  // for target drai
+  if (getLangOpts().DRAI && getLangOpts().SIMDBranch &&
+      Cond->getType()->isVectorType()) {
+    CondResult = CheckVectorBoolCondition(DoLoc, Cond);
+  } else {
+    CondResult = CheckBooleanCondition(DoLoc, Cond);
+  }
+
   if (CondResult.isInvalid())
     return StmtError();
   Cond = CondResult.get();
@@ -1723,7 +1737,13 @@ Sema::ActOnDoStmt(SourceLocation DoLoc, Stmt *Body,
       !Diags.isIgnored(diag::warn_comma_operator, Cond->getExprLoc()))
     CommaVisitor(*this).Visit(Cond);
 
-  return new (Context) DoStmt(Body, Cond, DoLoc, WhileLoc, CondRParen);
+  DoStmt *result =
+      new (Context) DoStmt(Body, Cond, DoLoc, WhileLoc, CondRParen);
+  // for target drai
+  if (getLangOpts().DRAI && getLangOpts().SIMDBranch) {
+    SimdBranchVisitor(*this).Visit(result);
+  }
+  return result;
 }
 
 namespace {
@@ -2181,9 +2201,14 @@ StmtResult Sema::ActOnForStmt(SourceLocation ForLoc, SourceLocation LParenLoc,
   if (isa<NullStmt>(Body))
     getCurCompoundScope().setHasEmptyLoopBodies();
 
-  return new (Context)
+  ForStmt *result = new (Context)
       ForStmt(Context, First, Second.get().second, Second.get().first, Third,
               Body, ForLoc, LParenLoc, RParenLoc);
+  // for target drai
+  if (getLangOpts().DRAI && getLangOpts().SIMDBranch) {
+    SimdBranchVisitor(*this).Visit(result);
+  }
+  return result;
 }
 
 /// In an Objective C collection iteration statement:

@@ -5903,6 +5903,10 @@ public:
                                      MultiExprArg ExecConfig,
                                      SourceLocation GGGLoc);
 
+  ExprResult ActOnDRAIExecConfigExpr(Scope *S, SourceLocation LLLLoc,
+                                     MultiExprArg ExecConfig,
+                                     SourceLocation GGGLoc);
+
   ExprResult ActOnCastExpr(Scope *S, SourceLocation LParenLoc,
                            Declarator &D, ParsedType &Ty,
                            SourceLocation RParenLoc, Expr *CastExpr);
@@ -12914,6 +12918,10 @@ public:
   ExprResult CheckBooleanCondition(SourceLocation Loc, Expr *E,
                                    bool IsConstexpr = false);
 
+  // for target drai
+  ExprResult CheckVectorBoolCondition(SourceLocation Loc, Expr *E,
+                                      bool IsConstexpr = false);
+
   /// ActOnExplicitBoolSpecifier - Build an ExplicitSpecifier from an expression
   /// found in an explicit(bool) specifier.
   ExplicitSpecifier ActOnExplicitBoolSpecifier(Expr *E);
@@ -13554,6 +13562,11 @@ private:
                                            CallExpr *TheCall);
   bool CheckNVPTXBuiltinFunctionCall(const TargetInfo &TI, unsigned BuiltinID,
                                      CallExpr *TheCall);
+  // for target drai
+  // fixup overloaded bulitin return type here
+  bool CheckDRAIBuiltinFunctionCall(const TargetInfo &TI, unsigned BuiltinID,
+                                    CallExpr *TheCall);
+  // end of target drai
 
   bool SemaBuiltinVAStart(unsigned BuiltinID, CallExpr *TheCall);
   bool SemaBuiltinVAStartARMMicrosoft(CallExpr *Call);

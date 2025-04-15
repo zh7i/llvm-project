@@ -1911,6 +1911,48 @@ void CodeGenFunction::EmitStoreOfScalar(llvm::Value *Value, Address Addr,
     return;
   }
 
+  // for target drai
+  if (getLangOpts().DRAI && getLangOpts().SIMDBranch &&
+      !SimdMaskIsEmpty()) { // argument is not restricted
+
+    // matching Cond and Value types
+    llvm::Value *select_cond = GetCurrSimdMask();
+    if (!SrcTy->isVectorTy()) {
+      select_cond = SimdMaskCheckAny(select_cond);
+    } else {
+      llvm::VectorType *vt = cast<llvm::VectorType>(SrcTy);
+      // multiple width vector
+      if (vt->getElementType() == Builder.getHalfTy() &&
+          vt->getElementCount() == llvm::ElementCount::getFixed(2)) {
+        // half2
+        select_cond = SimdMaskCheckAny(select_cond);
+        select_cond = SimdMaskExpand(select_cond, 2);
+      } else if (vt->getElementType() == Builder.getHalfTy() &&
+                 vt->getElementCount() ==
+                     llvm::ElementCount::getFixed(GetDRAISimdWidth() * 2)) {
+        // vhalf2
+        select_cond = SimdMaskExpand(select_cond, 2);
+      } else {
+        assert(vt->getElementCount().getFixedValue() == GetDRAISimdWidth());
+      }
+    }
+
+    llvm::Value *old = Builder.CreateLoad(Addr, "old");
+    // vbool use `iN` as storage type, so convert it to the real type for select
+    if (SrcTy->isVectorTy() &&
+        cast<llvm::VectorType>(SrcTy)->getElementType() ==
+            Builder.getInt1Ty() && Value->getType() != SrcTy) {
+      assert(Value->getType() == old->getType());
+      llvm::Type *old_ty = Value->getType();
+      Value = Builder.CreateBitCast(Value, SrcTy);
+      old = Builder.CreateBitCast(old, SrcTy);
+      Value = Builder.CreateSelect(select_cond, Value, old);
+      Value = Builder.CreateBitCast(Value, old_ty);
+    } else {
+      Value = Builder.CreateSelect(select_cond, Value, old);
+    }
+  }
+
   llvm::StoreInst *Store = Builder.CreateStore(Value, Addr, Volatile);
   if (isNontemporal) {
     llvm::MDNode *Node =
@@ -5012,6 +5054,11 @@ RValue CodeGenFunction::EmitCallExpr(const CallExpr *E,
 
   if (const auto *CE = dyn_cast<CXXMemberCallExpr>(E))
     return EmitCXXMemberCallExpr(CE, ReturnValue);
+
+  // for target drai
+  if (E->getCalleeDecl() && E->getCalleeDecl()->hasAttr<DRAIDeviceAttr>()) {
+    return EmitDRAIDeviceCallExpr(E, ReturnValue);
+  }
 
   if (const auto *CE = dyn_cast<CUDAKernelCallExpr>(E))
     return EmitCUDAKernelCallExpr(CE, ReturnValue);

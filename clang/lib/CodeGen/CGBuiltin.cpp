@@ -51,6 +51,7 @@
 #include "llvm/IR/IntrinsicsVE.h"
 #include "llvm/IR/IntrinsicsWebAssembly.h"
 #include "llvm/IR/IntrinsicsX86.h"
+#include "llvm/IR/IntrinsicsDRAI.h"
 #include "llvm/IR/MDBuilder.h"
 #include "llvm/IR/MatrixBuilder.h"
 #include "llvm/Support/ConvertUTF.h"
@@ -2487,7 +2488,7 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
       return RValue::get(emitUnaryMaybeConstrainedFPBuiltin(*this, E,
                                    Intrinsic::roundeven,
                                    Intrinsic::experimental_constrained_roundeven));
-                                   
+
     case Builtin::BIsin:
     case Builtin::BIsinf:
     case Builtin::BIsinl:
@@ -5571,6 +5572,8 @@ static Value *EmitTargetArchBuiltinExpr(CodeGenFunction *CGF,
   case llvm::Triple::riscv32:
   case llvm::Triple::riscv64:
     return CGF->EmitRISCVBuiltinExpr(BuiltinID, E, ReturnValue);
+  case llvm::Triple::drai: // for target drai
+    return CGF->EmitDRAIBuiltinExpr(BuiltinID, E, ReturnValue);
   case llvm::Triple::loongarch32:
   case llvm::Triple::loongarch64:
     return CGF->EmitLoongArchBuiltinExpr(BuiltinID, E);
@@ -20263,6 +20266,223 @@ Value *CodeGenFunction::EmitRISCVBuiltinExpr(unsigned BuiltinID,
   llvm::Function *F = CGM.getIntrinsic(ID, IntrinsicTypes);
   return Builder.CreateCall(F, Ops, "");
 }
+
+// for target drai
+Value *CodeGenFunction::EmitDRAIBuiltinExpr(unsigned BuiltinID,
+                                            const CallExpr *E,
+                                            ReturnValueSlot ReturnValue) {
+  llvm::Type *res_ty = ConvertType(E->getType());
+  switch (BuiltinID) {
+  default:
+    if (auto ret = DRAISimpleMappingBuiltin(BuiltinID, E, ReturnValue)) {
+      return ret;
+    }
+    llvm_unreachable("unexpected builtin ID!!\n");
+  case DRAI::BI__builtin_drai_pure_gather_i:
+  case DRAI::BI__builtin_drai_pure_gather_f:
+  case DRAI::BI__builtin_drai_pure_gather_h: {
+    Address base = EmitPointerWithAlignment(E->getArg(0)); // need pointee type
+    llvm::Value *base_val = base.getPointer();
+    llvm::Value *idx = EmitScalarExpr(E->getArg(1));
+    QualType idx_ty = E->getArg(1)->getType();
+
+    idx_ty = idx_ty.getCanonicalType(); // desugar
+    uint32_t vec_size = dyn_cast<VectorType>(idx_ty)->getNumElements();
+
+    // <8 x ptr> <ptrs>
+    llvm::Type *vptr_ty =
+        llvm::VectorType::get(base_val->getType(), vec_size, false);
+    llvm::Value *vptr = Builder.CreateInBoundsGEP(
+        base.getElementType(), base_val, idx,
+        "gather.ptrs"); // base + idx[i] * sizeof(*base)
+    assert(vptr->getType() == vptr_ty);
+    // i32 <alignment>
+    llvm::Value *align = Builder.getInt32(base.getAlignment().getQuantity());
+    align->setName("gather.align");
+    // <8 x i1> <mask>
+    // binding curr mask when emit generic call, and it earlier than CGBuiltin.
+    // so this mask always right!
+    llvm::Value *mask = GetCurrSimdMask();
+    // <8 x float> <passthru>
+    llvm::Value *undef = llvm::UndefValue::get(res_ty);
+
+    llvm::Function *gather =
+        CGM.getIntrinsic(Intrinsic::masked_gather,
+                         {res_ty, vptr_ty}); // only set the first two type
+    return Builder.CreateCall(gather, {vptr, align, mask, undef},
+                              "gather.value");
+  } break;
+  case DRAI::BI__builtin_drai_pure_scatter_i:
+  case DRAI::BI__builtin_drai_pure_scatter_f:
+  case DRAI::BI__builtin_drai_pure_scatter_h: {
+    Address base = EmitPointerWithAlignment(E->getArg(0));
+    llvm::Value *base_val = base.getPointer();
+    llvm::Value *idx = EmitScalarExpr(E->getArg(1));
+    llvm::Value *data = EmitScalarExpr(E->getArg(2)); // <8 x float> <data>
+    llvm::ConstantInt *oper =
+        dyn_cast<llvm::ConstantInt>(EmitScalarExpr(E->getArg(3)));
+    assert(oper && "scatter operator must be constant integer");
+    QualType idx_ty = E->getArg(1)->getType();
+
+    idx_ty = idx_ty.getCanonicalType(); // desugar
+    uint32_t vec_size = dyn_cast<VectorType>(idx_ty)->getNumElements();
+
+    if (oper->getZExtValue() == 0) { // llvm.masked.scatter
+      // <8 x ptr> <ptrs>
+      llvm::Type *vptr_ty =
+          llvm::VectorType::get(base_val->getType(), vec_size, false);
+      llvm::Value *vptr = Builder.CreateInBoundsGEP(
+          base.getElementType(), base_val, idx,
+          "scatter.ptrs"); // base + idx[i] * sizeof(*base)
+      assert(vptr->getType() == vptr_ty);
+      // i32 <alignment>
+      llvm::Value *align = Builder.getInt32(base.getAlignment().getQuantity());
+      align->setName("gather.align");
+      // <8 x i1> <mask>
+      llvm::Value *mask = GetCurrSimdMask();
+
+      llvm::Function *scatter = CGM.getIntrinsic(
+          Intrinsic::masked_scatter,
+          {data->getType(), vptr_ty}); // only set the first two type
+      return Builder.CreateCall(scatter, {data, vptr, align, mask});
+    } else { // arithmetic mode
+      llvm::Value *mask = GetCurrSimdMask();
+
+      Intrinsic::ID intr_id = 0;
+      if (base.getElementType()->isIntegerTy()) {
+        intr_id = Intrinsic::drai_scatter_store_i;
+      } else if (base.getElementType()->isFloatTy()) {
+        intr_id = Intrinsic::drai_scatter_store_f;
+      } else if (base.getElementType()->isHalfTy()) {
+        intr_id = Intrinsic::drai_scatter_store_h;
+      } else {
+        llvm_unreachable("unexpect");
+      }
+      llvm::Function *scatter =
+          CGM.getIntrinsic(intr_id, {base_val->getType()}); // overloaded
+      return Builder.CreateCall(scatter, {base_val, idx, data, mask, oper});
+    }
+  } break;
+  }
+  return nullptr;
+}
+
+Value *CodeGenFunction::DRAISimpleMappingBuiltin(unsigned BuiltinID,
+                                                 const CallExpr *E,
+                                                 ReturnValueSlot ReturnValue) {
+  SmallVector<Value *, 4> operands;
+  for (unsigned i = 0; i < E->getNumArgs(); ++i) {
+    operands.push_back(EmitScalarExpr(E->getArg(i)));
+  }
+  llvm::Type *res_type = ConvertType(E->getType());
+
+  Intrinsic::ID id = Intrinsic::not_intrinsic;
+  SmallVector<llvm::Type *, 4> types;
+  FastMathFlags FMF;
+
+  switch (BuiltinID) {
+  default:
+    return nullptr;
+  case DRAI::BI__builtin_drai_pure_masked_load_i:
+  case DRAI::BI__builtin_drai_pure_masked_load_f:
+  case DRAI::BI__builtin_drai_pure_masked_load_h:
+    id = Intrinsic::masked_load;
+    types = {res_type, operands[0]->getType()};
+    operands.insert(operands.end() - 1, GetCurrSimdMask());
+    break;
+  case DRAI::BI__builtin_drai_pure_masked_store_i:
+  case DRAI::BI__builtin_drai_pure_masked_store_f:
+  case DRAI::BI__builtin_drai_pure_masked_store_h:
+    id = Intrinsic::masked_store;
+    types = {operands[0]->getType(), operands[1]->getType()};
+    operands.push_back(GetCurrSimdMask());
+    break;
+  case DRAI::BI__builtin_drai_pure_sqrt:
+    id = Intrinsic::sqrt;
+    types = {res_type};
+    break;
+  case DRAI::BI__builtin_drai_pure_sin:
+    id = Intrinsic::sin;
+    types = {res_type};
+    break;
+  case DRAI::BI__builtin_drai_pure_cos:
+    id = Intrinsic::cos;
+    types = {res_type};
+    break;
+  // case DRAI::BI__builtin_drai_pure_pow:
+  //   id = Intrinsic::pow;
+  //   types = {res_type};
+  //   break;
+  case DRAI::BI__builtin_drai_pure_exp:
+    id = Intrinsic::exp;
+    types = {res_type};
+    break;
+  case DRAI::BI__builtin_drai_pure_exp2:
+    id = Intrinsic::exp2;
+    types = {res_type};
+    break;
+  case DRAI::BI__builtin_drai_pure_log:
+    id = Intrinsic::log;
+    types = {res_type};
+    break;
+  case DRAI::BI__builtin_drai_pure_log10:
+    id = Intrinsic::log10;
+    types = {res_type};
+    break;
+  case DRAI::BI__builtin_drai_pure_log2:
+    id = Intrinsic::log2;
+    types = {res_type};
+    break;
+  case DRAI::BI__builtin_drai_pure_reduce_add_i:
+    id = Intrinsic::vp_reduce_add;
+    types = {operands[1]->getType()};
+    operands.push_back(GetCurrSimdMask());
+    operands.push_back(GetDRAISimdWidthValue());
+    break;
+  case DRAI::BI__builtin_drai_pure_reduce_add_f:
+  case DRAI::BI__builtin_drai_pure_reduce_add_h:
+    id = Intrinsic::vp_reduce_fadd;
+    types = {operands[1]->getType()};
+    FMF.setAllowReassoc();
+    operands.push_back(GetCurrSimdMask());
+    operands.push_back(GetDRAISimdWidthValue());
+    break;
+  case DRAI::BI__builtin_drai_pure_reduce_max_i:
+    id = Intrinsic::vp_reduce_smax;
+    types = {operands[1]->getType()};
+    operands.push_back(GetCurrSimdMask());
+    operands.push_back(GetDRAISimdWidthValue());
+    break;
+  case DRAI::BI__builtin_drai_pure_reduce_max_f:
+  case DRAI::BI__builtin_drai_pure_reduce_max_h:
+    id = Intrinsic::vp_reduce_fmax;
+    types = {operands[1]->getType()};
+    operands.push_back(GetCurrSimdMask());
+    operands.push_back(GetDRAISimdWidthValue());
+    break;
+  case DRAI::BI__builtin_drai_pure_reduce_min_i:
+    id = Intrinsic::vp_reduce_smin;
+    types = {operands[1]->getType()};
+    operands.push_back(GetCurrSimdMask());
+    operands.push_back(GetDRAISimdWidthValue());
+    break;
+  case DRAI::BI__builtin_drai_pure_reduce_min_f:
+  case DRAI::BI__builtin_drai_pure_reduce_min_h:
+    id = Intrinsic::vp_reduce_fmin;
+    types = {operands[1]->getType()};
+    operands.push_back(GetCurrSimdMask());
+    operands.push_back(GetDRAISimdWidthValue());
+    break;
+  };
+
+  llvm::Function *F = CGM.getIntrinsic(id, types);
+  llvm::Instruction *result = Builder.CreateCall(F, operands);
+  if (FMF.any()) {
+    result->setFastMathFlags(FMF);
+  }
+  return result;
+}
+// end of target drai
 
 Value *CodeGenFunction::EmitLoongArchBuiltinExpr(unsigned BuiltinID,
                                                  const CallExpr *E) {

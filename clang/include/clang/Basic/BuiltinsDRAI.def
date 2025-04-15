@@ -1,0 +1,88 @@
+//===-- BuiltinsNyuzi.def - Nyuzi Builtin function database --------*- C++ -*-==//
+//
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
+//
+//===----------------------------------------------------------------------===//
+//
+// This file defines the Nyuzi-specific builtin function database. Users of
+// this file must define the BUILTIN macro to make use of this information.
+//
+//===----------------------------------------------------------------------===//
+
+// The format of this database matches clang/Basic/Builtins.def.
+
+#if defined(BUILTIN) && !defined(TARGET_BUILTIN)
+#   define TARGET_BUILTIN(ID, TYPE, ATTRS, FEATURE) BUILTIN(ID, TYPE, ATTRS)
+#endif
+
+#define _VI "E64i"
+#define _VF "E64f"
+#define _VX "E64x"
+#define _VB "E64b"
+
+BUILTIN(__builtin_drai_print_s_i, "vi", "nrc")
+BUILTIN(__builtin_drai_print_s_f, "vf", "nrc")
+BUILTIN(__builtin_drai_print_s_h, "vx", "nrc")
+BUILTIN(__builtin_drai_print_v_i, "v" _VI, "nrc")
+BUILTIN(__builtin_drai_print_v_f, "v" _VF, "nrc")
+BUILTIN(__builtin_drai_print_v_h, "v" _VX, "nrc")
+BUILTIN(__builtin_drai_print_v_b, "v" _VB, "nrc")
+BUILTIN(__builtin_drai_print_e, "vv*", "nrc")
+
+BUILTIN(__builtin_drai_thread_index, _VI, "nc")
+BUILTIN(__builtin_drai_core_index, "i", "nc")
+BUILTIN(__builtin_drai_core_dim, "i", "nc")
+BUILTIN(__builtin_drai_sync_threads, "vi", "nrc")
+BUILTIN(__builtin_drai_memory_fence, "vi", "nrc")
+
+BUILTIN(__builtin_drai_pure_masked_load_i, _VI "iC*i" _VI, "n")
+BUILTIN(__builtin_drai_pure_masked_load_f, _VF "fC*i" _VF, "n")
+BUILTIN(__builtin_drai_pure_masked_load_h, _VX "xC*i" _VX, "n")
+BUILTIN(__builtin_drai_pure_masked_store_i, "v" _VI "i*i", "n")
+BUILTIN(__builtin_drai_pure_masked_store_f, "v" _VF "f*i", "n")
+BUILTIN(__builtin_drai_pure_masked_store_h, "v" _VX "x*i", "n")
+
+BUILTIN(__builtin_drai_pure_gather_i, _VI "iC*" _VI, "n")
+BUILTIN(__builtin_drai_pure_gather_f, _VF "fC*" _VI, "n")
+BUILTIN(__builtin_drai_pure_gather_h, _VX "xC*" _VI, "n")
+BUILTIN(__builtin_drai_pure_scatter_i, "vi*" _VI _VI "i", "n")
+BUILTIN(__builtin_drai_pure_scatter_f, "vf*" _VI _VF "i", "n")
+BUILTIN(__builtin_drai_pure_scatter_h, "vx*" _VI _VX "i", "n")
+
+BUILTIN(__builtin_drai_pure_sqrt, "v.", "nc")
+BUILTIN(__builtin_drai_pure_sin, "v.", "nc")
+BUILTIN(__builtin_drai_pure_cos, "v.", "nc")
+// BUILTIN(__builtin_drai_pure_pow, "v.", "nc")
+BUILTIN(__builtin_drai_pure_exp, "v.", "nc")
+BUILTIN(__builtin_drai_pure_exp2, "v.", "nc")
+BUILTIN(__builtin_drai_pure_log, "v.", "nc")
+BUILTIN(__builtin_drai_pure_log10, "v.", "nc")
+BUILTIN(__builtin_drai_pure_log2, "v.", "nc")
+
+BUILTIN(__builtin_drai_pure_reduce_add_i, "ii" _VI, "nc")
+BUILTIN(__builtin_drai_pure_reduce_add_f, "ff" _VF, "nc")
+BUILTIN(__builtin_drai_pure_reduce_add_h, "xx" _VX, "nc")
+BUILTIN(__builtin_drai_pure_reduce_max_i, "ii" _VI, "nc")
+BUILTIN(__builtin_drai_pure_reduce_max_f, "ff" _VF, "nc")
+BUILTIN(__builtin_drai_pure_reduce_max_h, "xx" _VX, "nc")
+BUILTIN(__builtin_drai_pure_reduce_min_i, "ii" _VI, "nc")
+BUILTIN(__builtin_drai_pure_reduce_min_f, "ff" _VF, "nc")
+BUILTIN(__builtin_drai_pure_reduce_min_h, "xx" _VX, "nc")
+
+BUILTIN(__builtin_drai_pure_reduceshift_leftc_i, _VI _VI "i", "nc")
+BUILTIN(__builtin_drai_pure_reduceshift_leftc_f, _VF _VF "i", "nc")
+BUILTIN(__builtin_drai_pure_reduceshift_leftc_h, _VX _VX "i", "nc")
+BUILTIN(__builtin_drai_pure_reduceshift_rightc_i, _VI _VI "i", "nc")
+BUILTIN(__builtin_drai_pure_reduceshift_rightc_f, _VF _VF "i", "nc")
+BUILTIN(__builtin_drai_pure_reduceshift_rightc_h, _VX _VX "i", "nc")
+
+
+#undef _VI
+#undef _VF
+#undef _VX
+
+#undef BUILTIN
+#undef TARGET_BUILTIN

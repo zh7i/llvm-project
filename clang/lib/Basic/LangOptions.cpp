@@ -206,6 +206,9 @@ void LangOptions::setLangDefaults(LangOptions &Opts, Language Lang,
 
   // OpenCL and HLSL have half keyword
   Opts.Half = Opts.OpenCL || Opts.HLSL;
+
+  // for target drai
+  Opts.DRAI = T.isDRAI();
 }
 
 FPOptions FPOptions::defaultWithoutTrailingStorage(const LangOptions &LO) {

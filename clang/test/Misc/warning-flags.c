@@ -18,7 +18,7 @@ This test serves two purposes:
 
 The list of warnings below should NEVER grow.  It should gradually shrink to 0.
 
-CHECK: Warnings without flags (66):
+CHECK: Warnings without flags (67):
 
 CHECK-NEXT:   ext_expected_semi_decl_list
 CHECK-NEXT:   ext_explicit_specialization_storage_class
@@ -32,6 +32,7 @@ CHECK-NEXT:   ext_using_undefined_std
 CHECK-NEXT:   pp_invalid_string_literal
 CHECK-NEXT:   pp_out_of_date_dependency
 CHECK-NEXT:   pp_poisoning_existing_macro
+CHECK-NEXT:   simd_branch_defined_here
 CHECK-NEXT:   warn_accessor_property_type_mismatch
 CHECK-NEXT:   warn_arcmt_nsalloc_realloc
 CHECK-NEXT:   warn_asm_label_on_auto_decl

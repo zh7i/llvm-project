@@ -10,6 +10,7 @@
 #include "ToolChains/AIX.h"
 #include "ToolChains/AMDGPU.h"
 #include "ToolChains/AMDGPUOpenMP.h"
+#include "ToolChains/DRAI.h"
 #include "ToolChains/AVR.h"
 #include "ToolChains/Ananas.h"
 #include "ToolChains/Arch/RISCV.h"
@@ -6210,6 +6211,9 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
       case llvm::Triple::hexagon:
         TC = std::make_unique<toolchains::HexagonToolChain>(*this, Target,
                                                              Args);
+        break;
+      case llvm::Triple::drai:
+        TC = std::make_unique<toolchains::DRAIToolChain>(*this, Target, Args);
         break;
       case llvm::Triple::lanai:
         TC = std::make_unique<toolchains::LanaiToolChain>(*this, Target, Args);

@@ -2298,6 +2298,12 @@ void ASTStmtReader::VisitCUDAKernelCallExpr(CUDAKernelCallExpr *E) {
   E->setPreArg(CUDAKernelCallExpr::CONFIG, Record.readSubExpr());
 }
 
+void ASTStmtReader::VisitDRAIKernelCallExpr(DRAIKernelCallExpr *E) {
+  llvm_unreachable("drai not implemented");
+  VisitCallExpr(E);
+  E->setPreArg(CUDAKernelCallExpr::CONFIG, Record.readSubExpr()); // ???
+}
+
 //===----------------------------------------------------------------------===//
 // OpenCL Expressions and Statements.
 //===----------------------------------------------------------------------===//
@@ -4014,6 +4020,13 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
 
     case EXPR_CUDA_KERNEL_CALL:
       S = CUDAKernelCallExpr::CreateEmpty(
+          Context, /*NumArgs=*/Record[ASTStmtReader::NumExprFields],
+          /*HasFPFeatures=*/Record[ASTStmtReader::NumExprFields + 1], Empty);
+      break;
+
+    case EXPR_DRAI_KERNEL_CALL:
+      llvm_unreachable("drai not implemented");
+      S = DRAIKernelCallExpr::CreateEmpty(
           Context, /*NumArgs=*/Record[ASTStmtReader::NumExprFields],
           /*HasFPFeatures=*/Record[ASTStmtReader::NumExprFields + 1], Empty);
       break;

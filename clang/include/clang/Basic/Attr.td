@@ -4146,6 +4146,44 @@ def NoRandomizeLayout : InheritableAttr {
 }
 def : MutualExclusions<[RandomizeLayout, NoRandomizeLayout]>;
 
+// for target drai
+def DRAIDevice : InheritableAttr {
+  let Spellings = [GNU<"drai_device">];
+  let Subjects = SubjectList<[Function]>;
+  let Documentation = [Undocumented];
+}
+
+def DRAIGlobal : InheritableAttr {
+  let Spellings = [GNU<"drai_global">];
+  let Subjects = SubjectList<[Function]>;
+  let Documentation = [Undocumented];
+}
+
+def DRAIHost : InheritableAttr {
+  let Spellings = [GNU<"drai_host">];
+  let Subjects = SubjectList<[Function]>;
+  let Documentation = [Undocumented];
+  // let SimpleHandler = 1;
+}
+
+def : MutualExclusions<[DRAIGlobal, DRAIDevice]>;
+def : MutualExclusions<[DRAIGlobal, DRAIHost]>;
+
+def DRAIShared : InheritableAttr {
+  let Spellings = [GNU<"drai_shared">];
+  let Subjects = SubjectList<[Var]>;
+  let Documentation = [Undocumented];
+}
+
+def DRAIHWLoop : StmtAttr {
+  let Spellings = [GNU<"drai_hwloop">];
+  let Subjects = SubjectList<[ForStmt, CXXForRangeStmt, WhileStmt, DoStmt],
+                             ErrorDiag, "'for', 'while', and 'do' statements">;
+  let Args = [BoolArgument<"Enable", /*opt*/1>];
+  let Documentation = [Undocumented];
+}
+// end of target drai
+
 def FunctionReturnThunks : InheritableAttr,
     TargetSpecificAttr<TargetAnyX86> {
   let Spellings = [GCC<"function_return">];

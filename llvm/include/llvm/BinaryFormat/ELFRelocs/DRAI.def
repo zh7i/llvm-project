@@ -1,0 +1,18 @@
+#ifndef ELF_RELOC
+#error "ELF_RELOC must be defined"
+#endif
+
+ELF_RELOC(R_DRAI_NONE,          0)  /* No reloc */
+ELF_RELOC(R_DRAI_64,            1)  /* Direct 32 bit  */
+ELF_RELOC(R_DRAI_PC64,          4)  /* PC relative 32 bit */
+ELF_RELOC(R_DRAI_GOTPCREL64,    7)  /* 32 bit PC relative GOT entry */
+ELF_RELOC(R_DRAI_PLT64,         13) /* 32 bit PC relative PLT address */
+ELF_RELOC(R_DRAI_PLTOFF64,      16) /* 32 bit PLT offset */
+ELF_RELOC(R_DRAI_COPY,          19) /* Copy symbol at runtime */
+ELF_RELOC(R_DRAI_GLOB_DAT,      20) /* Create GOT entry */
+ELF_RELOC(R_DRAI_JMP_SLOT,      21) /* Create PLT entry */
+ELF_RELOC(R_DRAI_RELATIVE,      22) /* Adjust by program base */
+/* These are GNU extensions to enable C++ vtable garbage collection.  */
+/* TLS static relocations.  */
+ELF_RELOC(R_DRAI_TLS_GD64,      25)
+ELF_RELOC(R_DRAI_TLS_LDM,       28)

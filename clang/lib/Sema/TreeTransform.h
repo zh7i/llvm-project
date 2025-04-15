@@ -12028,6 +12028,33 @@ TreeTransform<Derived>::TransformCUDAKernelCallExpr(CUDAKernelCallExpr *E) {
                                       E->getRParenLoc(), EC.get());
 }
 
+template <typename Derived>
+ExprResult
+TreeTransform<Derived>::TransformDRAIKernelCallExpr(DRAIKernelCallExpr *E) {
+  ExprResult Callee = getDerived().TransformExpr(E->getCallee());
+  if (Callee.isInvalid())
+    return ExprError();
+
+  ExprResult EC = getDerived().TransformInitListExpr(E->getConfig());
+  if (EC.isInvalid())
+    return ExprError();
+
+  bool ArgChanged = false;
+  SmallVector<Expr *, 8> Args;
+  if (getDerived().TransformExprs(E->getArgs(), E->getNumArgs(), true, Args,
+                                  &ArgChanged))
+    return ExprError();
+
+  if (!getDerived().AlwaysRebuild() && Callee.get() == E->getCallee() &&
+      !ArgChanged)
+    return SemaRef.MaybeBindToTemporary(E);
+
+  SourceLocation FakeLParenLoc =
+      ((Expr *)Callee.get())->getSourceRange().getBegin();
+  return getDerived().RebuildCallExpr(Callee.get(), FakeLParenLoc, Args,
+                                      E->getRParenLoc(), EC.get());
+}
+
 template<typename Derived>
 ExprResult
 TreeTransform<Derived>::TransformCXXNamedCastExpr(CXXNamedCastExpr *E) {

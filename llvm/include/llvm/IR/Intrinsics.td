@@ -2516,6 +2516,7 @@ include "llvm/IR/IntrinsicsWebAssembly.td"
 include "llvm/IR/IntrinsicsRISCV.td"
 include "llvm/IR/IntrinsicsSPIRV.td"
 include "llvm/IR/IntrinsicsVE.td"
+include "llvm/IR/IntrinsicsDRAI.td"
 include "llvm/IR/IntrinsicsDirectX.td"
 include "llvm/IR/IntrinsicsLoongArch.td"
 

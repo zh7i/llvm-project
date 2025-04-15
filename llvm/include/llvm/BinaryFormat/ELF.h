@@ -320,6 +320,7 @@ enum {
   EM_VE = 251,            // NEC SX-Aurora VE
   EM_CSKY = 252,          // C-SKY 32-bit processor
   EM_LOONGARCH = 258,     // LoongArch
+  EM_DRAI = 999,          // DRAI
 };
 
 // Object file classes.
@@ -934,6 +935,12 @@ enum : unsigned {
 enum {
 #include "ELFRelocs/LoongArch.def"
 };
+
+// for target drai
+enum {
+#include "ELFRelocs/DRAI.def"
+};
+// end of target drai
 
 // Xtensa specific e_flags
 enum : unsigned {

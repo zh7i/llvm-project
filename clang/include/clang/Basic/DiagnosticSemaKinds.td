@@ -11805,6 +11805,19 @@ def err_non_designated_init_used : Error<
 def err_cast_from_randomized_struct : Error<
   "casting from randomized structure pointer type %0 to %1">;
 
+// for target drai
+def err_typecheck_vector_bool_condition : Error<
+  "unsupport: simd branch cond of type %0">;
+
+def err_simd_break_continue_in_scalar_loop: Error<
+  "unsupport: simd break/continue in scalar branch">;
+
+def note_upgrade_loop_cond : Note<
+  "please upgrade your loop condition to vector type">;
+
+def simd_branch_defined_here : Warning<"simd branch defined here">;
+// end of target drai
+
 // LoongArch-specific Diagnostics
 def err_loongarch_builtin_requires_la64 : Error<
   "this builtin requires target: loongarch64">;

@@ -1,0 +1,9 @@
+add_llvm_component_library(LLVMDRAIDesc
+  DRAIInstPrinter.cpp
+  DRAIMCAsmBackend.cpp
+  DRAIMCAsmInfo.cpp
+  DRAIMCCodeEmitter.cpp
+  DRAIMCObjectWriter.cpp
+  DRAIMCTargetDesc.cpp
+  DRAIInstPrinter.cpp
+  )

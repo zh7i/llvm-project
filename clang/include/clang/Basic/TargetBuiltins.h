@@ -332,6 +332,16 @@ namespace clang {
     };
   }
 
+  /// DRAI builtins
+  namespace DRAI {
+    enum {
+        LastTIBuiltin = clang::Builtin::FirstTSBuiltin-1,
+#define BUILTIN(ID, TYPE, ATTRS) BI##ID,
+#include "clang/Basic/BuiltinsDRAI.def"
+        LastTSBuiltin
+    };
+  }
+
   /// XCore builtins
   namespace XCore {
     enum {

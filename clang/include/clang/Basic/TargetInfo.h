@@ -1733,6 +1733,10 @@ protected:
   // Assert the values for the fractional and integral bits for each fixed point
   // type follow the restrictions given in clause 6.2.6.3 of N1169.
   void CheckFixedPointBits() const;
+
+  // for target DRAI
+public:
+  virtual uint32_t GetDRAISimdWidth() const { return 0; }
 };
 
 }  // end namespace clang

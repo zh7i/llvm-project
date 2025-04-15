@@ -173,6 +173,13 @@ StringRef llvm::object::getELFRelocationTypeName(uint32_t Machine,
       break;
     }
     break;
+  case ELF::EM_DRAI:
+    switch (Type) {
+#include "llvm/BinaryFormat/ELFRelocs/DRAI.def"
+    default:
+      break;
+    }
+    break;
   case ELF::EM_XTENSA:
     switch (Type) {
 #include "llvm/BinaryFormat/ELFRelocs/Xtensa.def"

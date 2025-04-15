@@ -398,6 +398,14 @@ void CodeGenFunction::FinishFunction(SourceLocation EndLoc) {
   // rather than that of the end of the function's scope '}'.
   ApplyDebugLocation AL(*this, Loc);
   EmitFunctionEpilog(*CurFnInfo, EmitRetDbgLoc, EndLoc);
+
+  // for target drai
+  if (getLangOpts().DRAI && getLangOpts().SIMDBranch) {
+    // clean up simd mask
+    PopSimdMask();
+    assert(simd_masks_.empty());
+  }
+
   EmitEndEHSpec(CurCodeDecl);
 
   assert(EHStack.empty() &&
@@ -1215,6 +1223,19 @@ void CodeGenFunction::StartFunction(GlobalDecl GD, QualType RetTy,
     }
   }
 
+  // for target drai
+  if (getLangOpts().DRAI && getLangOpts().SIMDBranch) {
+    if (D->hasAttr<DRAIDeviceAttr>()) {
+      assert(base_mask_decl_);
+      base_mask_ = Builder.CreateLoad(GetAddrOfLocalVar(base_mask_decl_));
+    }
+
+    // create truth mask
+    assert(simd_masks_.empty());
+    llvm::Value *mask = base_mask_ ? base_mask_ : CreateSimdMaskValue(true);
+    PushSimdMask(CreateSimdMaskAlloc(mask));
+  }
+
   // If any of the arguments have a variably modified type, make sure to
   // emit the type size, but only if the function is not naked. Naked functions
   // have no prolog to run this evaluation.
@@ -1306,6 +1327,19 @@ QualType CodeGenFunction::BuildFunctionArgList(GlobalDecl GD,
     else if (CGM.getCXXABI().hasMostDerivedReturn(GD))
       ResTy = CGM.getContext().VoidPtrTy;
     CGM.getCXXABI().buildThisParam(*this, Args);
+  }
+
+  // for target drai
+  if (FD->hasAttr<DRAIDeviceAttr>()) {
+    // add base mask decl when codegen get the function args type
+    QualType mask_ty = CGM.getContext().getVectorType(
+        CGM.getContext().BoolTy, GetDRAISimdWidth(), VectorType::GenericVector);
+    auto *base =
+        ImplicitParamDecl::Create(CGM.getContext(), nullptr, FD->getLocation(),
+                                  &CGM.getContext().Idents.get("truth.arg"),
+                                  mask_ty, ImplicitParamDecl::Other);
+    Args.push_back(base);
+    base_mask_decl_ = base;
   }
 
   // The base version of an inheriting constructor whose constructed base is a

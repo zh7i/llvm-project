@@ -6969,10 +6969,17 @@ ExprResult Sema::BuildCallExpr(Scope *Scope, Expr *Fn, SourceLocation LParenLoc,
     // in which case we won't do any semantic analysis now.
     if (Fn->isTypeDependent() || Expr::hasAnyTypeDependentArguments(ArgExprs)) {
       if (ExecConfig) {
-        return CUDAKernelCallExpr::Create(Context, Fn,
-                                          cast<CallExpr>(ExecConfig), ArgExprs,
-                                          Context.DependentTy, VK_PRValue,
-                                          RParenLoc, CurFPFeatureOverrides());
+        if (getLangOpts().DRAI) {
+          return DRAIKernelCallExpr::Create(
+              Context, Fn, cast<InitListExpr>(ExecConfig), ArgExprs,
+              Context.DependentTy, VK_PRValue, RParenLoc,
+              CurFPFeatureOverrides());
+        } else {
+          return CUDAKernelCallExpr::Create(
+              Context, Fn, cast<CallExpr>(ExecConfig), ArgExprs,
+              Context.DependentTy, VK_PRValue, RParenLoc,
+              CurFPFeatureOverrides());
+        }
       } else {
 
         tryImplicitlyCaptureThisIfImplicitMemberFunctionAccessWithDependentArgs(
@@ -7307,9 +7314,15 @@ ExprResult Sema::BuildResolvedCallExpr(Expr *Fn, NamedDecl *NDecl,
   if (Config) {
     assert(UsesADL == ADLCallKind::NotADL &&
            "CUDAKernelCallExpr should not use ADL");
-    TheCall = CUDAKernelCallExpr::Create(Context, Fn, cast<CallExpr>(Config),
-                                         Args, ResultTy, VK_PRValue, RParenLoc,
-                                         CurFPFeatureOverrides(), NumParams);
+    if (getLangOpts().DRAI) {
+      TheCall = DRAIKernelCallExpr::Create(
+          Context, Fn, cast<InitListExpr>(Config), Args, ResultTy, VK_PRValue,
+          RParenLoc, CurFPFeatureOverrides(), NumParams);
+    } else {
+      TheCall = CUDAKernelCallExpr::Create(
+          Context, Fn, cast<CallExpr>(Config), Args, ResultTy, VK_PRValue,
+          RParenLoc, CurFPFeatureOverrides(), NumParams);
+    }
   } else {
     TheCall =
         CallExpr::Create(Context, Fn, Args, ResultTy, VK_PRValue, RParenLoc,
@@ -7337,11 +7350,17 @@ ExprResult Sema::BuildResolvedCallExpr(Expr *Fn, NamedDecl *NDecl,
     // case, rebuild the node with enough storage. The waste of space is
     // immaterial since this only happens when some typos were corrected.
     if (CorrectedTypos && Args.size() < NumParams) {
-      if (Config)
-        TheCall = CUDAKernelCallExpr::Create(
-            Context, Fn, cast<CallExpr>(Config), Args, ResultTy, VK_PRValue,
-            RParenLoc, CurFPFeatureOverrides(), NumParams);
-      else
+      if (Config) {
+        if (getLangOpts().DRAI) {
+          TheCall = DRAIKernelCallExpr::Create(
+              Context, Fn, cast<InitListExpr>(Config), Args, ResultTy,
+              VK_PRValue, RParenLoc, CurFPFeatureOverrides(), NumParams);
+        } else {
+          TheCall = CUDAKernelCallExpr::Create(
+              Context, Fn, cast<CallExpr>(Config), Args, ResultTy, VK_PRValue,
+              RParenLoc, CurFPFeatureOverrides(), NumParams);
+        }
+      } else
         TheCall =
             CallExpr::Create(Context, Fn, Args, ResultTy, VK_PRValue, RParenLoc,
                              CurFPFeatureOverrides(), NumParams, UsesADL);
@@ -7496,6 +7515,15 @@ ExprResult Sema::BuildResolvedCallExpr(Expr *Fn, NamedDecl *NDecl,
   }
 
   return CheckForImmediateInvocation(MaybeBindToTemporary(TheCall), FDecl);
+}
+
+ExprResult Sema::ActOnDRAIExecConfigExpr(Scope *S, SourceLocation LLLLoc,
+                                         MultiExprArg ExecConfig,
+                                         SourceLocation GGGLoc) {
+  ASTContext &Ctx = getASTContext();
+  InitListExpr *E = new (Ctx) InitListExpr(Ctx, LLLLoc, ExecConfig, GGGLoc);
+  E->setType(Ctx.VoidTy);
+  return E;
 }
 
 ExprResult
@@ -10560,7 +10588,11 @@ static bool tryVectorConvertAndSplat(Sema &S, ExprResult *scalar,
     }
     if (!scalarTy->isIntegralType(S.Context))
       return true;
-    scalarCast = CK_IntegralCast;
+    if (vectorEltTy->isBooleanType()) { // for target drai, handle template simd branch
+      scalarCast = CK_IntegralToBoolean;
+    } else {
+      scalarCast = CK_IntegralCast;
+    }
   } else if (vectorEltTy->isRealFloatingType()) {
     if (scalarTy->isRealFloatingType()) {
       if (S.getLangOpts().OpenCL &&
@@ -13381,6 +13413,14 @@ QualType Sema::CheckVectorCompareOperands(ExprResult &LHS, ExprResult &RHS,
     assert(RHS.get()->getType()->hasFloatingRepresentation());
     CheckFloatComparison(Loc, LHS.get(), RHS.get(), Opc);
   }
+
+  // for target drai
+  if (Context.getLangOpts().DRAI) {
+    // always return vbool
+    const VectorType *VTy = vType->castAs<VectorType>();
+    return Context.getExtVectorType(Context.BoolTy, VTy->getNumElements());
+  }
+  // end of target drai
 
   // Return a signed type for the vector.
   return GetSignedVectorType(vType);
@@ -20634,6 +20674,48 @@ ExprResult Sema::CheckBooleanCondition(SourceLocation Loc, Expr *E,
   return E;
 }
 
+ExprResult Sema::CheckVectorBoolCondition(SourceLocation Loc, Expr *E,
+                                          bool IsConstexpr) {
+  QualType type = E->getType();
+  if (!type->isVectorType()) {
+    return Diag(E->getBeginLoc(), diag::err_typecheck_vector_bool_condition)
+           << E->getType() << E->getSourceRange();
+  }
+
+  type = type.getCanonicalType(); // desugar
+  const VectorType *vt = dyn_cast<VectorType>(type);
+
+  QualType et = vt->getElementType();
+  if (!et->isIntegerType() && !et->isFloatingType()) {
+    return Diag(E->getBeginLoc(), diag::err_typecheck_vector_bool_condition)
+           << E->getType() << E->getSourceRange();
+  }
+
+  llvm::APInt zero(Context.getTypeSize(Context.IntTy), 0);
+  Expr *zscal = IntegerLiteral::Create(Context, zero, Context.IntTy, Loc);
+  if (et->isBooleanType()) {
+    zscal =
+        ImplicitCastExpr::Create(Context, et, CK_IntegralToBoolean, zscal,
+                                 nullptr, VK_PRValue, CurFPFeatureOverrides());
+  } else if (et->isFloatingType()) {
+    zscal =
+        ImplicitCastExpr::Create(Context, et, CK_IntegralToFloating, zscal,
+                                 nullptr, VK_PRValue, CurFPFeatureOverrides());
+  } else {
+    zscal = ImpCastExprToType(zscal, et, CK_IntegralCast).get();
+  }
+  Expr *zvec =
+      ImplicitCastExpr::Create(Context, type, CK_VectorSplat, zscal, nullptr,
+                               VK_PRValue, CurFPFeatureOverrides());
+
+  QualType vbt = Context.getVectorType(Context.BoolTy, vt->getNumElements(),
+                                       VectorType::GenericVector);
+  Expr *res = BinaryOperator::Create(Context, E, zvec, BO_NE, vbt, VK_PRValue,
+                                     OK_Ordinary, Loc, CurFPFeatureOverrides());
+
+  return res;
+}
+
 Sema::ConditionResult Sema::ActOnCondition(Scope *S, SourceLocation Loc,
                                            Expr *SubExpr, ConditionKind CK,
                                            bool MissingOK) {
@@ -20645,7 +20727,13 @@ Sema::ConditionResult Sema::ActOnCondition(Scope *S, SourceLocation Loc,
   ExprResult Cond;
   switch (CK) {
   case ConditionKind::Boolean:
-    Cond = CheckBooleanCondition(Loc, SubExpr);
+    // for target drai
+    if (getLangOpts().DRAI && getLangOpts().SIMDBranch &&
+        SubExpr->getType()->isVectorType()) {
+      Cond = CheckVectorBoolCondition(Loc, SubExpr);
+    } else {
+      Cond = CheckBooleanCondition(Loc, SubExpr);
+    }
     break;
 
   case ConditionKind::ConstexprIf:

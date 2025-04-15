@@ -148,10 +148,34 @@ void CodeGenFunction::EmitStmt(const Stmt *S, ArrayRef<const Attr *> Attrs) {
   case Stmt::IndirectGotoStmtClass:
     EmitIndirectGotoStmt(cast<IndirectGotoStmt>(*S)); break;
 
-  case Stmt::IfStmtClass:      EmitIfStmt(cast<IfStmt>(*S));              break;
+  case Stmt::IfStmtClass: {
+    const IfStmt &stmt = cast<IfStmt>(*S);
+    // for target drai
+    if (getLangOpts().DRAI && getLangOpts().SIMDBranch && stmt.IsSimdBranch()) {
+      EmitVecIfStmt(stmt);
+    } else {
+      EmitIfStmt(stmt);
+    }
+  } break;
   case Stmt::WhileStmtClass:   EmitWhileStmt(cast<WhileStmt>(*S), Attrs); break;
-  case Stmt::DoStmtClass:      EmitDoStmt(cast<DoStmt>(*S), Attrs);       break;
-  case Stmt::ForStmtClass:     EmitForStmt(cast<ForStmt>(*S), Attrs);     break;
+  case Stmt::DoStmtClass: {
+    const DoStmt &stmt = cast<DoStmt>(*S);
+    // for target drai
+    if (getLangOpts().DRAI && getLangOpts().SIMDBranch && stmt.IsSimdBranch()) {
+      EmitVecDoStmt(stmt, Attrs);
+    } else {
+      EmitDoStmt(stmt, Attrs);
+    }
+  } break;
+  case Stmt::ForStmtClass: {
+    const ForStmt &stmt = cast<ForStmt>(*S);
+    // for target drai
+    if (getLangOpts().DRAI && getLangOpts().SIMDBranch && stmt.IsSimdBranch()) {
+      EmitVecForStmt(stmt, Attrs);
+    } else {
+      EmitForStmt(stmt, Attrs);
+    }
+  } break;
 
   case Stmt::ReturnStmtClass:  EmitReturnStmt(cast<ReturnStmt>(*S));      break;
 
@@ -455,12 +479,24 @@ bool CodeGenFunction::EmitSimpleStmt(const Stmt *S,
   case Stmt::GotoStmtClass:
     EmitGotoStmt(cast<GotoStmt>(*S));
     break;
-  case Stmt::BreakStmtClass:
-    EmitBreakStmt(cast<BreakStmt>(*S));
-    break;
-  case Stmt::ContinueStmtClass:
-    EmitContinueStmt(cast<ContinueStmt>(*S));
-    break;
+  case Stmt::BreakStmtClass: {
+    // for target drai
+    const BreakStmt &stmt = cast<BreakStmt>(*S);
+    if (getLangOpts().DRAI && getLangOpts().SIMDBranch && stmt.IsSimdBranch()) {
+      EmitVecBreakStmt(stmt);
+    } else {
+      EmitBreakStmt(stmt);
+    }
+  } break;
+  case Stmt::ContinueStmtClass: {
+    // for target drai
+    const ContinueStmt &stmt = cast<ContinueStmt>(*S);
+    if (getLangOpts().DRAI && getLangOpts().SIMDBranch && stmt.IsSimdBranch()) {
+      EmitVecContinueStmt(stmt);
+    } else {
+      EmitContinueStmt(stmt);
+    }
+  } break;
   case Stmt::DefaultStmtClass:
     EmitDefaultStmt(cast<DefaultStmt>(*S), Attrs);
     break;
@@ -865,6 +901,70 @@ void CodeGenFunction::EmitIfStmt(const IfStmt &S) {
   EmitBlock(ContBlock, true);
 }
 
+void CodeGenFunction::EmitVecIfStmt(const IfStmt &S) {
+  llvm::BasicBlock *ThenBlock = createBasicBlock("if.then");
+  llvm::BasicBlock *ContBlock = createBasicBlock("if.end");
+  llvm::BasicBlock *ElseBlock = ContBlock;
+  if (S.getElse())
+    ElseBlock = createBasicBlock("if.else");
+
+  llvm::Value *cond = EmitAnyExpr(S.getCond()).getScalarVal();
+  llvm::Value *cond_and = Builder.CreateAnd(GetCurrSimdMask(), cond);
+  llvm::Value *cond_any = SimdMaskCheckAny(cond_and);
+  llvm::Value *rev = nullptr, *rev_and = nullptr, *rev_any = nullptr;
+  if (S.getElse()) { // dominate then & else block
+    rev = Builder.CreateNot(cond);
+    rev_and = Builder.CreateAnd(GetCurrSimdMask(), rev);
+    rev_any = SimdMaskCheckAny(cond_and);
+  }
+
+  Builder.CreateCondBr(cond_any, ThenBlock, ElseBlock);
+  EmitBlock(ThenBlock);
+  incrementProfileCounter(&S);
+  {
+    RunCleanupsScope ThenScope(*this);
+    if (!BreakContinueStack.empty()) {
+      BreakContinue &curr_bc = BreakContinueStack.back();
+      curr_bc.branch_next_blocks.push_back(ElseBlock);
+    }
+
+    cond_and->setName("mask.then");
+    PushSimdMask(CreateSimdMaskAlloc(cond_and));
+    EmitStmt(S.getThen());
+    PopSimdMask();
+
+    if (!BreakContinueStack.empty()) {
+      BreakContinue &curr_bc = BreakContinueStack.back();
+      curr_bc.branch_next_blocks.pop_back();
+    }
+  }
+
+  if (S.getElse()) {
+    Builder.CreateCondBr(rev_any, ElseBlock, ContBlock);
+    EmitBlock(ElseBlock);
+    {
+      RunCleanupsScope ElseScope(*this);
+      if (!BreakContinueStack.empty()) {
+        BreakContinue &curr_bc = BreakContinueStack.back();
+        curr_bc.branch_next_blocks.push_back(ContBlock);
+      }
+
+      rev_and->setName("mask.else");
+      PushSimdMask(CreateSimdMaskAlloc(rev_and));
+      EmitStmt(S.getElse());
+      PopSimdMask();
+
+      if (!BreakContinueStack.empty()) {
+        BreakContinue &curr_bc = BreakContinueStack.back();
+        curr_bc.branch_next_blocks.pop_back();
+      }
+    }
+    EmitBranch(ContBlock);
+  }
+
+  EmitBlock(ContBlock, true);
+}
+
 void CodeGenFunction::EmitWhileStmt(const WhileStmt &S,
                                     ArrayRef<const Attr *> WhileAttrs) {
   // Emit the header for the loop, which will also become
@@ -1025,6 +1125,52 @@ void CodeGenFunction::EmitDoStmt(const DoStmt &S,
     SimplifyForwardingBlocks(LoopCond.getBlock());
 }
 
+void CodeGenFunction::EmitVecDoStmt(const DoStmt &S,
+                                    ArrayRef<const Attr *> DoAttrs) {
+  JumpDest LoopExit = getJumpDestInCurrentScope("do.end");
+  JumpDest LoopCond = getJumpDestInCurrentScope("do.cond");
+
+  uint64_t ParentCount = getCurrentProfileCount();
+
+  BreakContinueStack.push_back(BreakContinue(LoopExit, LoopCond));
+
+  llvm::BasicBlock *LoopBody = createBasicBlock("do.body");
+
+  Address mask_addr = CreateSimdMaskAlloc(GetCurrSimdMask());
+
+  EmitBlock(LoopBody);
+  {
+    RunCleanupsScope BodyScope(*this);
+    PushSimdMask(mask_addr);
+    EmitStmt(S.getBody());
+    PopSimdMask();
+  }
+
+  EmitBlock(LoopCond.getBlock());
+
+  llvm::Value *cond = EmitAnyExpr(S.getCond()).getScalarVal();
+  llvm::Value *mask = Builder.CreateLoad(mask_addr, "mask.body");
+  llvm::Value *cond_and = Builder.CreateAnd(mask, cond, "mask.next");
+  Builder.CreateStore(cond_and, mask_addr);
+
+  BreakContinueStack.pop_back();
+
+  const SourceRange &R = S.getSourceRange();
+  LoopStack.push(LoopBody, CGM.getContext(), CGM.getCodeGenOpts(), DoAttrs,
+                 SourceLocToDebugLoc(R.getBegin()),
+                 SourceLocToDebugLoc(R.getEnd()),
+                 checkIfLoopMustProgress(false));
+
+  llvm::Value *cond_any = SimdMaskCheckAny(cond_and);
+  uint64_t BackedgeCount = getProfileCount(S.getBody()) - ParentCount;
+  Builder.CreateCondBr(cond_any, LoopBody, LoopExit.getBlock(),
+                       createProfileWeightsForLoop(S.getCond(), BackedgeCount));
+
+  LoopStack.pop();
+
+  EmitBlock(LoopExit.getBlock());
+}
+
 void CodeGenFunction::EmitForStmt(const ForStmt &S,
                                   ArrayRef<const Attr *> ForAttrs) {
   JumpDest LoopExit = getJumpDestInCurrentScope("for.end");
@@ -1138,6 +1284,100 @@ void CodeGenFunction::EmitForStmt(const ForStmt &S,
   LoopStack.pop();
 
   // Emit the fall-through block.
+  EmitBlock(LoopExit.getBlock(), true);
+}
+
+void CodeGenFunction::EmitVecForStmt(const ForStmt &S,
+                                     ArrayRef<const Attr *> ForAttrs) {
+  JumpDest LoopExit = getJumpDestInCurrentScope("for.end");
+  LexicalScope ForScope(*this, S.getSourceRange());
+
+  if (S.getInit()) {
+    EmitStmt(S.getInit());
+  }
+  Address mask_addr = CreateSimdMaskAlloc(GetCurrSimdMask()); // in init block
+
+  JumpDest CondDest = getJumpDestInCurrentScope("for.cond");
+  llvm::BasicBlock *CondBlock = CondDest.getBlock();
+  EmitBlock(CondBlock);
+
+  const SourceRange &R = S.getSourceRange();
+  LoopStack.push(CondBlock, CGM.getContext(), CGM.getCodeGenOpts(), ForAttrs,
+                 SourceLocToDebugLoc(R.getBegin()),
+                 SourceLocToDebugLoc(R.getEnd()),
+                 checkIfLoopMustProgress(false));
+
+  LexicalScope ConditionScope(*this, S.getSourceRange());
+
+  if ((S.getCond() && S.getConditionVariable())) {
+    llvm_unreachable("unsupport for codegen!");
+  }
+
+  JumpDest Continue = getJumpDestInCurrentScope("for.inc");
+  Address continued_addr = CreateSimdMaskAlloc(CreateSimdMaskValue(false));
+  BreakContinueStack.push_back(BreakContinue(
+      LoopExit, Continue, GetCurrMaskIndex() + 1, continued_addr));
+
+  if (S.getCond()) {
+    llvm::BasicBlock *ExitBlock = LoopExit.getBlock();
+    if (ForScope.requiresCleanups()) {
+      ExitBlock = createBasicBlock("for.cond.cleanup");
+    }
+
+    llvm::BasicBlock *ForBody = createBasicBlock("for.body");
+
+    llvm::Value *cond = EmitAnyExpr(S.getCond()).getScalarVal();
+    llvm::Value *mask = Builder.CreateLoad(mask_addr, "mask.reborn");
+    llvm::Value *cond_and = Builder.CreateAnd(mask, cond, "mask.next");
+    Builder.CreateStore(cond_and, mask_addr);
+
+    llvm::Value *cond_any = SimdMaskCheckAny(cond_and);
+    Builder.CreateCondBr(
+        cond_any, ForBody, ExitBlock,
+        createProfileWeightsForLoop(S.getCond(), getProfileCount(S.getBody())));
+
+    if (ExitBlock != LoopExit.getBlock()) {
+      EmitBlock(ExitBlock);
+      EmitBranchThroughCleanup(LoopExit);
+    }
+
+    EmitBlock(ForBody);
+  }
+
+  incrementProfileCounter(&S);
+
+  {
+    RunCleanupsScope BodyScope(*this);
+    PushSimdMask(mask_addr);
+    EmitStmt(S.getBody());
+    PopSimdMask();
+  }
+
+  // always emit inc block
+  {
+    EmitBlock(Continue.getBlock());
+    llvm::Value *mask = Builder.CreateLoad(mask_addr, "mask.body");
+    llvm::Value *continued = Builder.CreateLoad(continued_addr, "continued");
+    llvm::Value *reborn = Builder.CreateOr(mask, continued, "mask.reborn");
+    Builder.CreateStore(reborn, mask_addr);
+  }
+
+  if (S.getInc()) {
+    PushSimdMask(mask_addr);
+    EmitStmt(S.getInc());
+    PopSimdMask();
+  }
+
+  BreakContinueStack.pop_back();
+
+  ConditionScope.ForceCleanup();
+
+  EmitBranch(CondBlock);
+
+  ForScope.ForceCleanup();
+
+  LoopStack.pop();
+
   EmitBlock(LoopExit.getBlock(), true);
 }
 
@@ -1402,6 +1642,36 @@ void CodeGenFunction::EmitBreakStmt(const BreakStmt &S) {
   EmitBranchThroughCleanup(BreakContinueStack.back().BreakBlock);
 }
 
+// todo fix scalar loop
+void CodeGenFunction::EmitVecBreakStmt(const BreakStmt &S) {
+  assert(!BreakContinueStack.empty() && "break stmt not in a loop or switch!");
+
+  if (!HaveInsertPoint()) {
+    return;
+  }
+  EmitStopPoint(&S);
+
+  BreakContinue &curr_bc = BreakContinueStack.back();
+
+  JumpDest Dest = curr_bc.ContinueBlock; // maybe not all are break
+  EHScopeStack::stable_iterator TopCleanup =
+      EHStack.getInnermostActiveNormalCleanup();
+  if (!(TopCleanup == EHStack.stable_end() ||
+        TopCleanup.encloses(Dest.getScopeDepth()))) {
+    llvm_unreachable("unsupport simd break");
+    return;
+  }
+
+  XorSimdMask(GetCurrSimdMask(), curr_bc.loop_mask_index, GetCurrMaskIndex());
+
+  llvm::BasicBlock *next_block = Dest.getBlock();
+  if (!curr_bc.branch_next_blocks.empty()) {
+    next_block = curr_bc.branch_next_blocks.back();
+  }
+  Builder.CreateBr(next_block);
+  Builder.ClearInsertionPoint();
+}
+
 void CodeGenFunction::EmitContinueStmt(const ContinueStmt &S) {
   assert(!BreakContinueStack.empty() && "continue stmt not in a loop!");
 
@@ -1412,6 +1682,40 @@ void CodeGenFunction::EmitContinueStmt(const ContinueStmt &S) {
     EmitStopPoint(&S);
 
   EmitBranchThroughCleanup(BreakContinueStack.back().ContinueBlock);
+}
+
+void CodeGenFunction::EmitVecContinueStmt(const ContinueStmt &S) {
+  assert(!BreakContinueStack.empty() && "continue stmt not in a loop!");
+
+  if (!HaveInsertPoint()) {
+    return;
+  }
+  EmitStopPoint(&S);
+
+  BreakContinue &curr_bc = BreakContinueStack.back();
+
+  JumpDest Dest = curr_bc.ContinueBlock;
+  EHScopeStack::stable_iterator TopCleanup =
+      EHStack.getInnermostActiveNormalCleanup();
+  if (!(TopCleanup == EHStack.stable_end() ||
+        TopCleanup.encloses(Dest.getScopeDepth()))) {
+    llvm_unreachable("unsupport simd continue");
+    return;
+  }
+
+  XorSimdMask(GetCurrSimdMask(), curr_bc.loop_mask_index, GetCurrMaskIndex());
+
+  // will be reborn in the inc or cond block
+  llvm::Value *continued = Builder.CreateLoad(curr_bc.continued_mask);
+  continued = Builder.CreateOr(continued, GetCurrSimdMask(), "continued");
+  Builder.CreateStore(continued, curr_bc.continued_mask);
+
+  llvm::BasicBlock *next_block = Dest.getBlock();
+  if (!curr_bc.branch_next_blocks.empty()) {
+    next_block = curr_bc.branch_next_blocks.back();
+  }
+  Builder.CreateBr(next_block);
+  Builder.ClearInsertionPoint();
 }
 
 /// EmitCaseStmtRange - If case statement range is not too big then

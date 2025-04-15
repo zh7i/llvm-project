@@ -322,6 +322,18 @@ static Attr *handleUnlikely(Sema &S, Stmt *St, const ParsedAttr &A,
   return ::new (S.Context) UnlikelyAttr(S.Context, A);
 }
 
+static Attr *handleDRAIHWLoop(Sema &S, Stmt *St, const ParsedAttr &A,
+                              SourceRange Range) {
+  bool Enable = true; // default true
+
+  if (A.getNumArgs() >= 1) { // forward argument
+    Expr *E = A.getArgAsExpr(0);
+    Enable = E->getIntegerConstantExpr(S.Context)->getZExtValue();
+  }
+
+  return ::new (S.Context) DRAIHWLoopAttr(S.Context, A, Enable);
+}
+
 #define WANT_STMT_MERGE_LOGIC
 #include "clang/Sema/AttrParsedAttrImpl.inc"
 #undef WANT_STMT_MERGE_LOGIC
@@ -521,6 +533,8 @@ static Attr *ProcessStmtAttribute(Sema &S, Stmt *St, const ParsedAttr &A,
     return handleLikely(S, St, A, Range);
   case ParsedAttr::AT_Unlikely:
     return handleUnlikely(S, St, A, Range);
+  case ParsedAttr::AT_DRAIHWLoop: // for target drai
+    return handleDRAIHWLoop(S, St, A, Range);
   default:
     // N.B., ClangAttrEmitter.cpp emits a diagnostic helper that ensures a
     // declaration attribute is not written on a statement, but this code is

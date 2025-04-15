@@ -379,6 +379,24 @@ bool InferAddressSpacesImpl::rewriteIntrinsicOperands(IntrinsicInst *II,
   case Intrinsic::ptrmask:
     // This is handled as an address expression, not as a use memory operation.
     return false;
+  case Intrinsic::masked_load: { // todo commit this to main branch
+    Type *RetTy = II->getType();
+    Type *NewPtrTy = NewV->getType();
+    Function *NewDecl =
+        Intrinsic::getDeclaration(M, II->getIntrinsicID(), {RetTy, NewPtrTy});
+    II->setArgOperand(0, NewV);
+    II->setCalledFunction(NewDecl);
+    return true;
+  }
+  case Intrinsic::masked_store: {
+    Type *ValueTy = II->getOperand(0)->getType();
+    Type *NewPtrTy = NewV->getType();
+    Function *NewDecl =
+        Intrinsic::getDeclaration(M, II->getIntrinsicID(), {ValueTy, NewPtrTy});
+    II->setArgOperand(1, NewV);
+    II->setCalledFunction(NewDecl);
+    return true;
+  }
   case Intrinsic::masked_gather: {
     Type *RetTy = II->getType();
     Type *NewPtrTy = NewV->getType();
@@ -416,6 +434,14 @@ void InferAddressSpacesImpl::collectRewritableIntrinsicOperands(
   case Intrinsic::ptrmask:
   case Intrinsic::objectsize:
     appendsFlatAddressExpressionToPostorderStack(II->getArgOperand(0),
+                                                 PostorderStack, Visited);
+    break;
+  case Intrinsic::masked_load:  // todo commit this to main branch
+    appendsFlatAddressExpressionToPostorderStack(II->getArgOperand(0),
+                                                 PostorderStack, Visited);
+    break;
+  case Intrinsic::masked_store:
+    appendsFlatAddressExpressionToPostorderStack(II->getArgOperand(1),
                                                  PostorderStack, Visited);
     break;
   case Intrinsic::masked_gather:

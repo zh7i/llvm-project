@@ -254,6 +254,9 @@ public:
                                              const FunctionProtoType *FTP,
                                              const CXXMethodDecl *MD);
 
+  // for target drai
+  const CGFunctionInfo &arrangeDRAIDeviceDeclaration(const FunctionDecl *FD);
+
   /// "Arrange" the LLVM information for a call or type with the given
   /// signature.  This is largely an internal method; other clients
   /// should use one of the above routines, which ultimately defer to

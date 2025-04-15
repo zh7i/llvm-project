@@ -2836,6 +2836,7 @@ DEF_TRAVERSE_STMT(OpaqueValueExpr, {})
 DEF_TRAVERSE_STMT(TypoExpr, {})
 DEF_TRAVERSE_STMT(RecoveryExpr, {})
 DEF_TRAVERSE_STMT(CUDAKernelCallExpr, {})
+DEF_TRAVERSE_STMT(DRAIKernelCallExpr, {})
 
 // These operators (all of them) do not need any action except
 // iterating over the children.

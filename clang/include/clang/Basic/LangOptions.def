@@ -456,6 +456,12 @@ ENUM_LANGOPT(ExtendIntArgs, ExtendArgsKind, 1, ExtendArgsKind::ExtendTo32,
 
 VALUE_LANGOPT(FuchsiaAPILevel, 32, 0, "Fuchsia API level")
 
+// for target drai
+LANGOPT(DRAI              , 1, 0, "DRAI compile")
+LANGOPT(SIMDBranch        , 1, 0, "support SIMD branch")
+LANGOPT(DRAIIsDevice      , 1, 0, "compiling for DRAI device")
+// end of target drai
+
 // This option will be removed in the future once the backend
 // supports all operations (like division or float-to-integer conversion)
 // on large _BitInts.

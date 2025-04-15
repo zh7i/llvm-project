@@ -1522,6 +1522,8 @@ unsigned CallExpr::offsetToTrailingObjects(StmtClass SC) {
     return sizeof(UserDefinedLiteral);
   case CUDAKernelCallExprClass:
     return sizeof(CUDAKernelCallExpr);
+  case DRAIKernelCallExprClass:
+    return sizeof(DRAIKernelCallExpr);
   default:
     llvm_unreachable("unexpected class deriving from CallExpr!");
   }

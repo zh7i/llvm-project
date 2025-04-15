@@ -2031,6 +2031,8 @@ bool Sema::CheckTSBuiltinFunctionCall(const TargetInfo &TI, unsigned BuiltinID,
   case llvm::Triple::nvptx:
   case llvm::Triple::nvptx64:
     return CheckNVPTXBuiltinFunctionCall(TI, BuiltinID, TheCall);
+  case llvm::Triple::drai: // for target drai
+    return CheckDRAIBuiltinFunctionCall(TI, BuiltinID, TheCall);
   }
 }
 
@@ -4846,6 +4848,151 @@ bool Sema::CheckNVPTXBuiltinFunctionCall(const TargetInfo &TI,
     return checkArgCountAtMost(*this, TheCall, 3);
   }
 
+  return false;
+}
+
+bool Sema::CheckDRAIBuiltinFunctionCall(const TargetInfo &TI,
+                                        unsigned BuiltinID, CallExpr *TheCall) {
+  const FunctionProtoType *FPT =
+      TheCall->getDirectCallee()->getType()->castAs<FunctionProtoType>();
+  if (!FPT->isVariadic()) { // only check overloaded builtins
+    return false;
+  }
+
+  using OpTy = QualType;
+  [[maybe_unused]] OpTy Op0Ty, Op1Ty, Op2Ty, Op3Ty;
+  switch (TheCall->getNumArgs()) {
+  default:
+    llvm_unreachable("unexpect operand num!!");
+  case 4:
+    Op3Ty = TheCall->getArg(3)->getType().getCanonicalType();
+    [[fallthrough]];
+  case 3:
+    Op2Ty = TheCall->getArg(2)->getType().getCanonicalType();
+    [[fallthrough]];
+  case 2:
+    Op1Ty = TheCall->getArg(1)->getType().getCanonicalType();
+    [[fallthrough]];
+  case 1:
+    Op0Ty = TheCall->getArg(0)->getType().getCanonicalType(); // desugar
+    [[fallthrough]];
+  case 0:
+    break;
+  }
+
+  enum Constraint {
+    // operand constraint
+    NoOp,
+    Unary,
+    Binary,
+    Ternary,
+
+    // type constraint
+    Scalar,
+    Vector,
+    SclOrVec,
+    Integer,  // integer or vector of integer
+    Floating, // floating or vector of floating
+  };
+
+#define DRCK(cond)                                                             \
+  if (!(cond))                                                                 \
+    return false;
+  [[maybe_unused]] auto OperConst = [&](ArrayRef<Constraint> c) -> bool {
+    for (auto cc : c) {
+      switch (cc) {
+      default:
+        llvm_unreachable("unexpect constraint");
+      case NoOp:
+        DRCK(TheCall->getNumArgs() == 0);
+        break;
+      case Unary:
+        DRCK(TheCall->getNumArgs() == 1);
+        break;
+      case Binary:
+        DRCK(TheCall->getNumArgs() == 2);
+        break;
+      case Ternary:
+        DRCK(TheCall->getNumArgs() == 3);
+        break;
+      };
+    }
+    return true;
+  };
+  [[maybe_unused]] auto TypeConst = [&](OpTy ty,
+                                        ArrayRef<Constraint> c) -> bool {
+    for (auto cc : c) {
+      switch (cc) {
+      default:
+        llvm_unreachable("unexpect constraint");
+      case Scalar:
+        DRCK(ty->isScalarType());
+        break;
+      case Vector:
+        DRCK(ty->isVectorType());
+        break;
+      case SclOrVec:
+        DRCK(ty->isScalarType() || ty->isVectorType());
+        break;
+      case Integer:
+        DRCK(ty->isIntegerType() ||
+             ty->isVectorType() &&
+                 ty->castAs<VectorType>()->getElementType()->isIntegerType());
+        break;
+      case Floating:
+        DRCK(ty->isFloatingType() ||
+             ty->isVectorType() &&
+                 ty->castAs<VectorType>()->getElementType()->isFloatingType());
+        break;
+      };
+    }
+    return true;
+  };
+  [[maybe_unused]] auto TypeSame = [&](ArrayRef<OpTy> ops) -> bool {
+    for (auto it = ops.begin(); it != ops.end(); ++it) {
+      for (auto it2 = it + 1; it2 != ops.end(); ++it2) {
+        DRCK(*it == *it2);
+      }
+    }
+    return true;
+  };
+#undef DRCK
+
+  OpTy RetTy; // must deduce RetTy
+  [[maybe_unused]] OpTy VoidTy = Context.VoidTy;
+
+  switch (BuiltinID) {
+  default:
+    llvm_unreachable("unexpect overloaded builtin id");
+    break;
+  case DRAI::BI__builtin_drai_pure_sqrt:
+  case DRAI::BI__builtin_drai_pure_sin:
+  case DRAI::BI__builtin_drai_pure_cos:
+  case DRAI::BI__builtin_drai_pure_exp:
+  case DRAI::BI__builtin_drai_pure_exp2:
+  case DRAI::BI__builtin_drai_pure_log:
+  case DRAI::BI__builtin_drai_pure_log10:
+  case DRAI::BI__builtin_drai_pure_log2:
+    if (OperConst({Unary}) && TypeConst(Op0Ty, {SclOrVec, Floating})) {
+      RetTy = Op0Ty;
+    }
+    break;
+  // case DRAI::BI__builtin_drai_pure_pow:
+  //   if (OperConst({Binary}) && TypeConst(Op0Ty, {SclOrVec, Floating}) &&
+  //       TypeSame({Op0Ty, Op1Ty})) {
+  //     RetTy = Op0Ty;
+  //   }
+  //   break;
+  };
+
+  if (RetTy.isNull()) {
+    return Diag(TheCall->getBeginLoc(),
+                diag::err_ovl_no_viable_function_in_call)
+           << TheCall->getDirectCallee()->getName()
+           << TheCall->getSourceRange();
+  }
+
+  TheCall->setType(RetTy);
   return false;
 }
 

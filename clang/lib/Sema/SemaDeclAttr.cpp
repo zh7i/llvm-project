@@ -3834,7 +3834,7 @@ static void handleInitPriorityAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
     S.Diag(AL.getLoc(), diag::warn_attribute_ignored) << AL;
     return;
   }
-  
+
   if (S.getLangOpts().HLSL) {
     S.Diag(AL.getLoc(), diag::err_hlsl_init_priority_unsupported);
     return;
@@ -8659,6 +8659,17 @@ static bool MustDelayAttributeArguments(const ParsedAttr &AL) {
   return false;
 }
 
+// for target drai
+template<typename Attr>
+static void handleDRAIAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
+  // if (auto *A = D->getAttr<Attr>()) {
+  //   if (!A->isImplicit())
+  //     return;
+  //   D->dropAttr<Attr>();
+  // }
+  D->addAttr(::new (S.Context) Attr(S.Context, AL));
+}
+
 /// ProcessDeclAttribute - Apply the specific attribute to the specified decl if
 /// the attribute applies to decls.  If the attribute is a type attribute, just
 /// silently ignore it if a GNU attribute.
@@ -9436,6 +9447,21 @@ ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D, const ParsedAttr &AL,
   case ParsedAttr::AT_UsingIfExists:
     handleSimpleAttribute<UsingIfExistsAttr>(S, D, AL);
     break;
+
+  // for target drai
+  case ParsedAttr::AT_DRAIHost:
+    handleDRAIAttr<DRAIHostAttr>(S, D, AL);
+    break;
+  case ParsedAttr::AT_DRAIGlobal:
+    handleDRAIAttr<DRAIGlobalAttr>(S, D, AL);
+    break;
+  case ParsedAttr::AT_DRAIDevice:
+    handleDRAIAttr<DRAIDeviceAttr>(S, D, AL);
+    break;
+  case ParsedAttr::AT_DRAIShared:
+    handleDRAIAttr<DRAISharedAttr>(S, D, AL);
+    break;
+  // end of target drai
   }
 }
 

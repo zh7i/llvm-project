@@ -1825,6 +1825,48 @@ CUDAKernelCallExpr *CUDAKernelCallExpr::CreateEmpty(const ASTContext &Ctx,
   return new (Mem) CUDAKernelCallExpr(NumArgs, HasFPFeatures, Empty);
 }
 
+// for target drai
+DRAIKernelCallExpr::DRAIKernelCallExpr(Expr *Fn, InitListExpr *Config,
+                                       ArrayRef<Expr *> Args, QualType Ty,
+                                       ExprValueKind VK, SourceLocation RP,
+                                       FPOptionsOverride FPFeatures,
+                                       unsigned MinNumArgs)
+    : CallExpr(DRAIKernelCallExprClass, Fn, /*PreArgs=*/Config, Args, Ty, VK,
+               RP, FPFeatures, MinNumArgs, NotADL) {}
+
+DRAIKernelCallExpr::DRAIKernelCallExpr(unsigned NumArgs, bool HasFPFeatures,
+                                       EmptyShell Empty)
+    : CallExpr(DRAIKernelCallExprClass, /*NumPreArgs=*/END_PREARG, NumArgs,
+               HasFPFeatures, Empty) {}
+
+DRAIKernelCallExpr *
+DRAIKernelCallExpr::Create(const ASTContext &Ctx, Expr *Fn,
+                           InitListExpr *Config, ArrayRef<Expr *> Args,
+                           QualType Ty, ExprValueKind VK, SourceLocation RP,
+                           FPOptionsOverride FPFeatures, unsigned MinNumArgs) {
+  // Allocate storage for the trailing objects of CallExpr.
+  unsigned NumArgs = std::max<unsigned>(Args.size(), MinNumArgs);
+  unsigned SizeOfTrailingObjects = CallExpr::sizeOfTrailingObjects(
+      /*NumPreArgs=*/END_PREARG, NumArgs, FPFeatures.requiresTrailingStorage());
+  void *Mem = Ctx.Allocate(sizeof(DRAIKernelCallExpr) + SizeOfTrailingObjects,
+                           alignof(DRAIKernelCallExpr));
+  return new (Mem)
+      DRAIKernelCallExpr(Fn, Config, Args, Ty, VK, RP, FPFeatures, MinNumArgs);
+}
+
+DRAIKernelCallExpr *DRAIKernelCallExpr::CreateEmpty(const ASTContext &Ctx,
+                                                    unsigned NumArgs,
+                                                    bool HasFPFeatures,
+                                                    EmptyShell Empty) {
+  // Allocate storage for the trailing objects of CallExpr.
+  unsigned SizeOfTrailingObjects = CallExpr::sizeOfTrailingObjects(
+      /*NumPreArgs=*/END_PREARG, NumArgs, HasFPFeatures);
+  void *Mem = Ctx.Allocate(sizeof(DRAIKernelCallExpr) + SizeOfTrailingObjects,
+                           alignof(DRAIKernelCallExpr));
+  return new (Mem) DRAIKernelCallExpr(NumArgs, HasFPFeatures, Empty);
+}
+// end of target drai
+
 CXXParenListInitExpr *
 CXXParenListInitExpr::Create(ASTContext &C, ArrayRef<Expr *> Args, QualType T,
                              unsigned NumUserSpecifiedExprs,

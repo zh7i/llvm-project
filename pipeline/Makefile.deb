@@ -1,0 +1,10 @@
+project = llvm-project
+project_path = /pipeline/opt/deeproute/common/$(project)
+all: builddir createdeb
+	echo "OK"
+builddir:
+	mkdir -p $(project_path)
+	mv ./DEBIAN /pipeline/
+	mv ../release_dir/* $(project_path)
+createdeb:
+	cd /pipeline && chmod -R 775 * && dpkg-deb -b . $(project).deb

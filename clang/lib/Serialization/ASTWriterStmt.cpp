@@ -2141,6 +2141,13 @@ void ASTStmtWriter::VisitCUDAKernelCallExpr(CUDAKernelCallExpr *E) {
   Code = serialization::EXPR_CUDA_KERNEL_CALL;
 }
 
+void ASTStmtWriter::VisitDRAIKernelCallExpr(DRAIKernelCallExpr *E) {
+  llvm_unreachable("drai not implemented");
+  VisitCallExpr(E);
+  Record.AddStmt(E->getConfig());
+  Code = serialization::EXPR_DRAI_KERNEL_CALL;
+}
+
 //===----------------------------------------------------------------------===//
 // OpenCL Expressions and Statements.
 //===----------------------------------------------------------------------===//

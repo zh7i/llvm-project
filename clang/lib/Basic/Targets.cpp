@@ -41,6 +41,7 @@
 #include "Targets/WebAssembly.h"
 #include "Targets/X86.h"
 #include "Targets/XCore.h"
+#include "Targets/DRAI.h"
 #include "clang/Basic/Diagnostic.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/TargetParser/Triple.h"
@@ -121,6 +122,9 @@ std::unique_ptr<TargetInfo> AllocateTarget(const llvm::Triple &Triple,
 
   case llvm::Triple::xcore:
     return std::make_unique<XCoreTargetInfo>(Triple, Opts);
+
+  case llvm::Triple::drai:
+    return std::make_unique<DRAITargetInfo>(Triple, Opts);
 
   case llvm::Triple::hexagon:
     if (os == llvm::Triple::Linux &&

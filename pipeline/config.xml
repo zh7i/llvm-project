@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<project>
+    <current_subproject>default</current_subproject>
+
+    <!-- default project-->
+    <subproject id="default">
+        <module_name>llvm-project</module_name>
+        <optional_task>null</optional_task>
+        <architecture>amd64</architecture>
+        <version>1.0.0</version>
+        <depends>
+            <depend>libtinfo-dev</depend>
+        </depends>
+        <maintainers>
+          <maintainer>maoshengye@deeproute.ai</maintainer>
+        </maintainers>
+        <priority>optional</priority>
+        <breaks>
+        </breaks>
+        <description>llvm-project</description>
+    </subproject>
+</project>

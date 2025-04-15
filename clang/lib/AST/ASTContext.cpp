@@ -11730,6 +11730,10 @@ static GVALinkage adjustGVALinkageForAttributes(const ASTContext &Context,
     // units.
     if (Context.shouldExternalize(D))
       return GVA_StrongExternal;
+  } else if (Context.getLangOpts().DRAI && Context.getLangOpts().DRAIIsDevice) {
+    if (D->hasAttr<DRAIGlobalAttr>() &&
+        (L == GVA_DiscardableODR || L == GVA_Internal))
+      return GVA_StrongODR;
   }
   return L;
 }

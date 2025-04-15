@@ -476,6 +476,8 @@ std::string tools::getCPUName(const Driver &D, const ArgList &Args,
   case llvm::Triple::wasm32:
   case llvm::Triple::wasm64:
     return std::string(getWebAssemblyTargetCPU(Args));
+  case llvm::Triple::drai:
+    return "drai001";
   }
 }
 

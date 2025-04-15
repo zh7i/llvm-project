@@ -440,6 +440,15 @@ MDNode *LoopInfo::createMetadata(
         Ctx, {MDString::get(Ctx, "llvm.loop.parallel_accesses"), AccGroup}));
   }
 
+  // for target drai
+  if (Attrs.DRAIHWLoop != LoopAttributes::Unspecified) {
+    LoopProperties.push_back(MDNode::get(
+        Ctx, MDString::get(Ctx, Attrs.DRAIHWLoop == LoopAttributes::Enable
+                                    ? "llvm.drai.hwloop"
+                                    : "llvm.drai.hwloop.disable")));
+  }
+  // end of target drai
+
   LoopProperties.insert(LoopProperties.end(), AdditionalLoopProperties.begin(),
                         AdditionalLoopProperties.end());
   return createFullUnrollMetadata(Attrs, LoopProperties, HasUserTransforms);
@@ -453,7 +462,8 @@ LoopAttributes::LoopAttributes(bool IsParallel)
       VectorizeScalable(LoopAttributes::Unspecified), InterleaveCount(0),
       UnrollCount(0), UnrollAndJamCount(0),
       DistributeEnable(LoopAttributes::Unspecified), PipelineDisabled(false),
-      PipelineInitiationInterval(0), MustProgress(false) {}
+      PipelineInitiationInterval(0), MustProgress(false),
+      DRAIHWLoop(LoopAttributes::Unspecified) {} // for target drai
 
 void LoopAttributes::clear() {
   IsParallel = false;
@@ -470,6 +480,7 @@ void LoopAttributes::clear() {
   PipelineDisabled = false;
   PipelineInitiationInterval = 0;
   MustProgress = false;
+  DRAIHWLoop = LoopAttributes::Unspecified; // for target drai
 }
 
 LoopInfo::LoopInfo(BasicBlock *Header, const LoopAttributes &Attrs,
@@ -603,6 +614,15 @@ void LoopInfoStack::push(BasicBlock *Header, clang::ASTContext &Ctx,
     const LoopHintAttr *LH = dyn_cast<LoopHintAttr>(Attr);
     const OpenCLUnrollHintAttr *OpenCLHint =
         dyn_cast<OpenCLUnrollHintAttr>(Attr);
+
+    // for target drai
+    const DRAIHWLoopAttr *HWLoop = dyn_cast<DRAIHWLoopAttr>(Attr);
+    if (HWLoop) {
+      StagedAttrs.DRAIHWLoop = HWLoop->getEnable() ? LoopAttributes::Enable
+                                                   : LoopAttributes::Disable;
+      continue;
+    }
+    // end of target drai
 
     // Skip non loop hint attributes
     if (!LH && !OpenCLHint) {

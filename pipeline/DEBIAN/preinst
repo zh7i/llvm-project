@@ -1,0 +1,10 @@
+#!/bin/sh
+# Copyright 2021 DeepRoute.ai. All Rights Reserved.
+# Author: zhihuangliu@deeproute.ai
+#
+
+echo
+echo Install llvm-project...
+echo
+
+exit 0

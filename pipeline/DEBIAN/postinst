@@ -1,0 +1,17 @@
+#!/bin/sh
+# Copyright 2021 DeepRoute.ai. All Rights Reserved.
+# Author: zhihuangliu@deeproute.ai
+#
+
+PROJECT=llvm-project
+TARGET_DIRECTORY=/opt/deeproute/common/${PROJECT}
+
+echo "${PROJECT} installed on path ${TARGET_DIRECTORY}"
+chown -hR ${SUDO_USER}:${SUDO_USER} ${TARGET_DIRECTORY}
+
+rm -rf /${PROJECT}.deb
+
+echo Deeproute.ai!!!
+echo
+
+exit 0

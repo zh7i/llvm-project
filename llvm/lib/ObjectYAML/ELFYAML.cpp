@@ -355,6 +355,7 @@ void ScalarEnumerationTraits<ELFYAML::ELF_EM>::enumeration(
   ECase(EM_VE);
   ECase(EM_CSKY);
   ECase(EM_LOONGARCH);
+  ECase(EM_DRAI);
 #undef ECase
   IO.enumFallback<Hex16>(Value);
 }
@@ -911,6 +912,9 @@ void ScalarEnumerationTraits<ELFYAML::ELF_REL>::enumeration(
     break;
   case ELF::EM_LOONGARCH:
 #include "llvm/BinaryFormat/ELFRelocs/LoongArch.def"
+    break;
+  case ELF::EM_DRAI:
+#include "llvm/BinaryFormat/ELFRelocs/DRAI.def"
     break;
   case ELF::EM_XTENSA:
 #include "llvm/BinaryFormat/ELFRelocs/Xtensa.def"

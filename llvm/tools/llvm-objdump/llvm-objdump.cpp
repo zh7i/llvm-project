@@ -197,6 +197,7 @@ bool objdump::Disassemble;
 bool objdump::DisassembleAll;
 bool objdump::SymbolDescription;
 static std::vector<std::string> DisassembleSymbols;
+static std::string BinOutFile;
 static bool DisassembleZeroes;
 static std::vector<std::string> DisassemblerOptions;
 DIDumpType objdump::DwarfDumpType;
@@ -1734,6 +1735,31 @@ static void disassembleObject(const Target *TheTarget, ObjectFile &Obj,
         continue;
       }
 
+      // for target drai
+      if (BinOutFile != "") {
+        uint64_t dumpSize;
+        dumpSize = End - Start;
+        llvm::ArrayRef<uint8_t> data = Bytes.slice(Start, dumpSize);
+
+        Expected<std::unique_ptr<FileOutputBuffer>> BufferOrErr =
+            FileOutputBuffer::create(BinOutFile, dumpSize);
+        if (!BufferOrErr) {
+          reportError(
+              createStringError(errc::invalid_argument,
+                                toString(BufferOrErr.takeError()) +
+                                    "create output buffer err: " + BinOutFile),
+              BinOutFile);
+          break;
+        }
+
+        std::unique_ptr<FileOutputBuffer> Buf = std::move(*BufferOrErr);
+        std::copy(data.begin(), data.end(), Buf->getBufferStart());
+        if (Error E = Buf->commit()) {
+          reportError(createFileError(BinOutFile, std::move(E)), BinOutFile);
+          break;
+        }
+      }
+
       bool DumpARMELFData = false;
       formatted_raw_ostream FOS(outs());
 
@@ -3026,6 +3052,8 @@ static void parseObjdumpOptions(const llvm::opt::InputArgList &InputArgs) {
   SymbolDescription = InputArgs.hasArg(OBJDUMP_symbol_description);
   DisassembleSymbols =
       commaSeparatedValues(InputArgs, OBJDUMP_disassemble_symbols_EQ);
+  BinOutFile =
+      InputArgs.getLastArgValue(OBJDUMP_disassemble_symbols_bin_out_file).str();
   DisassembleZeroes = InputArgs.hasArg(OBJDUMP_disassemble_zeroes);
   if (const opt::Arg *A = InputArgs.getLastArg(OBJDUMP_dwarf_EQ)) {
     DwarfDumpType = StringSwitch<DIDumpType>(A->getValue())

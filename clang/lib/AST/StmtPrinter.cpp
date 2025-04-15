@@ -1908,6 +1908,20 @@ void StmtPrinter::VisitCUDAKernelCallExpr(CUDAKernelCallExpr *Node) {
   OS << ")";
 }
 
+void StmtPrinter::VisitDRAIKernelCallExpr(DRAIKernelCallExpr *Node) {
+  PrintExpr(Node->getCallee());
+  OS << "<<<";
+  InitListExpr *Cfg = dyn_cast<InitListExpr>(Node->getConfig());
+  for (unsigned i = 0, e = Cfg->getNumInits(); i != e; ++i) {
+    if (i)
+      OS << ", ";
+    PrintExpr(Cfg->getInit(i));
+  }
+  OS << ">>>(";
+  PrintCallArgs(Node);
+  OS << ")";
+}
+
 void StmtPrinter::VisitCXXRewrittenBinaryOperator(
     CXXRewrittenBinaryOperator *Node) {
   CXXRewrittenBinaryOperator::DecomposedForm Decomposed =

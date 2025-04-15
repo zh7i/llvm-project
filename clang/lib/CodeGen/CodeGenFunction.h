@@ -1437,6 +1437,17 @@ private:
 
     JumpDest BreakBlock;
     JumpDest ContinueBlock;
+
+    // for target drai
+    BreakContinue(JumpDest Break, JumpDest Continue, uint32_t mask_index,
+                  Address continued_addr)
+        : BreakBlock(Break), ContinueBlock(Continue), is_simd_loop(true),
+          loop_mask_index(mask_index), continued_mask(continued_addr) {}
+
+    bool is_simd_loop = false;
+    uint32_t loop_mask_index;
+    Address continued_mask = Address::invalid();
+    std::vector<llvm::BasicBlock *> branch_next_blocks;
   };
   SmallVector<BreakContinue, 8> BreakContinueStack;
 
@@ -3245,16 +3256,23 @@ public:
   void EmitGotoStmt(const GotoStmt &S);
   void EmitIndirectGotoStmt(const IndirectGotoStmt &S);
   void EmitIfStmt(const IfStmt &S);
+  void EmitVecIfStmt(const IfStmt &S); // for target drai
 
   void EmitWhileStmt(const WhileStmt &S,
                      ArrayRef<const Attr *> Attrs = std::nullopt);
   void EmitDoStmt(const DoStmt &S, ArrayRef<const Attr *> Attrs = std::nullopt);
+  void EmitVecDoStmt(const DoStmt &S,
+                     ArrayRef<const Attr *> Attrs = std::nullopt); // for target drai
   void EmitForStmt(const ForStmt &S,
                    ArrayRef<const Attr *> Attrs = std::nullopt);
+  void EmitVecForStmt(const ForStmt &S,
+                      ArrayRef<const Attr *> Attrs = std::nullopt); // for target drai
   void EmitReturnStmt(const ReturnStmt &S);
   void EmitDeclStmt(const DeclStmt &S);
   void EmitBreakStmt(const BreakStmt &S);
+  void EmitVecBreakStmt(const BreakStmt &S); // for target drai
   void EmitContinueStmt(const ContinueStmt &S);
+  void EmitVecContinueStmt(const ContinueStmt &S); // for target drai
   void EmitSwitchStmt(const SwitchStmt &S);
   void EmitDefaultStmt(const DefaultStmt &S, ArrayRef<const Attr *> Attrs);
   void EmitCaseStmt(const CaseStmt &S, ArrayRef<const Attr *> Attrs);
@@ -4110,6 +4128,11 @@ public:
                                QualType ImplicitParamTy, const CallExpr *E);
   RValue EmitCXXMemberCallExpr(const CXXMemberCallExpr *E,
                                ReturnValueSlot ReturnValue);
+
+  // for target drai
+  RValue EmitDRAIDeviceCallExpr(const CallExpr *CE,
+                                ReturnValueSlot ReturnValue);
+
   RValue EmitCXXMemberOrOperatorMemberCallExpr(const CallExpr *CE,
                                                const CXXMethodDecl *MD,
                                                ReturnValueSlot ReturnValue,
@@ -4281,6 +4304,14 @@ public:
   llvm::Value *EmitRISCVBuiltinExpr(unsigned BuiltinID, const CallExpr *E,
                                     ReturnValueSlot ReturnValue);
   llvm::Value *EmitLoongArchBuiltinExpr(unsigned BuiltinID, const CallExpr *E);
+
+  // for target drai
+  llvm::Value *EmitDRAIBuiltinExpr(unsigned BuiltinID, const CallExpr *E,
+                                   ReturnValueSlot ReturnValue);
+  llvm::Value *DRAISimpleMappingBuiltin(unsigned BuiltinID, const CallExpr *E,
+                                        ReturnValueSlot ReturnValue);
+  // end of target drai
+
   void ProcessOrderScopeAMDGCN(llvm::Value *Order, llvm::Value *Scope,
                                llvm::AtomicOrdering &AO,
                                llvm::SyncScope::ID &SSID);
@@ -4838,6 +4869,103 @@ public:
   void
   EmitAArch64MultiVersionResolver(llvm::Function *Resolver,
                                   ArrayRef<MultiVersionResolverOption> Options);
+
+
+  // for target drai
+private:
+  uint32_t GetDRAISimdWidth() {
+    const TargetInfo &TI = getContext().getTargetInfo();
+    return TI.GetDRAISimdWidth();
+  }
+
+  llvm::Value *GetDRAISimdWidthValue() {
+    return llvm::ConstantInt::get(Builder.getInt32Ty(), GetDRAISimdWidth());
+  }
+
+  llvm::Value *CreateSimdMaskValue(bool splat_value) {
+    llvm::Value *value = llvm::ConstantVector::getSplat(
+        llvm::ElementCount::get(GetDRAISimdWidth(), false),
+        Builder.getInt1(splat_value));
+    value->setName(splat_value ? "truth" : "false");
+    return value;
+  }
+
+  Address CreateSimdMaskAlloc(llvm::Value *value = nullptr) {
+    llvm::Type *mask_ty =
+        llvm::VectorType::get(Builder.getInt1Ty(), GetDRAISimdWidth(), false);
+    Address addr =
+        CreateTempAlloca(mask_ty, CharUnits::fromQuantity(64), "mask.addr");
+    if (value) {
+      Builder.CreateStore(value, addr);
+    }
+    return addr;
+  }
+
+  llvm::IntegerType *GetIMaskTy() {
+    return llvm::IntegerType::get(Builder.getContext(), GetDRAISimdWidth());
+  }
+  llvm::ConstantInt *GetIMaskVal(int32_t val) {
+    return llvm::ConstantInt::get(GetIMaskTy(), val);
+  }
+
+  llvm::Value *SimdMaskCheckAll(llvm::Value *mask) {
+    mask = Builder.CreateBitCast(mask, GetIMaskTy(), "mask.int");
+    return Builder.CreateICmpEQ(mask, GetIMaskVal(-1),
+                                "mask.all"); // mask.int == -1
+  }
+
+  llvm::Value *SimdMaskCheckAny(llvm::Value *mask) {
+    mask = Builder.CreateBitCast(mask, GetIMaskTy(), "mask.int");
+    return Builder.CreateICmpNE(mask, GetIMaskVal(0),
+                                "mask.any"); // mask.int != 0
+  }
+
+  llvm::Value *SimdMaskCheckNone(llvm::Value *mask) {
+    mask = Builder.CreateBitCast(mask, GetIMaskTy(), "mask.int");
+    return Builder.CreateICmpEQ(mask, GetIMaskVal(0),
+                                "mask.none"); // mask.int == 0
+  }
+
+  llvm::Value *SimdMaskExpand(llvm::Value *mask, uint32_t num) {
+    if (!mask->getType()->isVectorTy()) {
+      return Builder.CreateVectorSplat(num, mask, "mask.expand");
+    }
+    std::vector<int> pos(GetDRAISimdWidth() * num);
+    std::generate(pos.begin(), pos.end(),
+                  [&, i = 0]() mutable { return i++ / num; });
+    return Builder.CreateShuffleVector(mask, pos, "mask.expand");
+  }
+
+  void PushSimdMask(Address addr) { simd_masks_.push_back(addr); }
+
+  void PopSimdMask() { simd_masks_.pop_back(); }
+
+  llvm::Value *GetCurrSimdMask() {
+    assert(!simd_masks_.empty());
+    return Builder.CreateLoad(simd_masks_.back(), "mask");
+  }
+
+  void SetCurrSimdMask(llvm::Value *mask) {
+    assert(!simd_masks_.empty());
+    Builder.CreateStore(mask, simd_masks_.back());
+  }
+
+  bool SimdMaskIsEmpty() { return simd_masks_.empty(); }
+
+  uint32_t GetCurrMaskIndex() { return simd_masks_.size() - 1; }
+
+  void XorSimdMask(llvm::Value *xor_val, uint32_t begin, uint32_t end) {
+    for (; begin != end; ++begin) {
+      llvm::Value *val = Builder.CreateLoad(simd_masks_[begin]);
+      val = Builder.CreateXor(val, xor_val);
+      Builder.CreateStore(val, simd_masks_[begin]);
+    }
+  }
+
+  SmallVector<Address, 4> simd_masks_;
+  ImplicitParamDecl *base_mask_decl_ = nullptr;
+  llvm::Value *base_mask_ = nullptr;
+  // end of target drai
 
 private:
   QualType getVarArgType(const Expr *Arg);

@@ -1,0 +1,8 @@
+Package: deeproute-PACKAGE_NAME
+Version: VERSION_FULL
+Architecture: ARCHITECTURE
+Depends: DEPENDS
+Maintainer: MAINTAINERS
+Priority: PRIORITY
+Breaks: BREAKS
+Description: DESCRIPTION

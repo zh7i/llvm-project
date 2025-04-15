@@ -7376,6 +7376,48 @@ bool NVPTXTargetCodeGenInfo::shouldEmitStaticExternCAliases() const {
 }
 }
 
+// for target drai
+namespace {
+
+// class DRAITargetCodeGenInfo;
+
+// class DRAIABIInfo : public ABIInfo {
+//   DRAITargetCodeGenInfo &CGInfo;
+
+// public:
+//   DRAIABIInfo(CodeGenTypes &CGT, DRAITargetCodeGenInfo &Info)
+//       : ABIInfo(CGT), CGInfo(Info) {}
+// };
+
+class DRAITargetCodeGenInfo : public TargetCodeGenInfo {
+public:
+  DRAITargetCodeGenInfo(CodeGenTypes &CGT)
+      : TargetCodeGenInfo(std::make_unique<DefaultABIInfo>(CGT)) {}
+
+  LangAS getGlobalVarAddressSpace(CodeGenModule &CGM,
+                                  const VarDecl *D) const override;
+
+  // reference from llvm/lib/Target/DRAI/DRAIBaseInfo.h
+  enum class DRAIAddressSpace {
+    ADDRSPACE_GLOBAL = 0,
+    ADDRSPACE_SHARED = 1,
+  };
+};
+
+LangAS DRAITargetCodeGenInfo::getGlobalVarAddressSpace(CodeGenModule &CGM,
+                                                       const VarDecl *D) const {
+  if (CGM.getLangOpts().DRAI && CGM.getLangOpts().DRAIIsDevice) {
+    if (D && D->hasAttr<DRAISharedAttr>()) {
+      return getLangASFromTargetAS(
+          (unsigned)DRAIAddressSpace::ADDRSPACE_SHARED);
+    }
+  }
+  return TargetCodeGenInfo::getGlobalVarAddressSpace(CGM, D);
+}
+
+} // namespace
+// end of target drai
+
 //===----------------------------------------------------------------------===//
 // SystemZ ABI Implementation
 //===----------------------------------------------------------------------===//
@@ -12494,6 +12536,10 @@ const TargetCodeGenInfo &CodeGenModule::getTargetCodeGenInfo() {
                                                       : hasFP64   ? 64
                                                                   : 32));
   }
+  // for target drai
+  case llvm::Triple::drai:
+    return SetCGInfo(new DRAITargetCodeGenInfo(Types));
+  // end of target drai
   case llvm::Triple::bpfeb:
   case llvm::Triple::bpfel:
     return SetCGInfo(new BPFTargetCodeGenInfo(Types));

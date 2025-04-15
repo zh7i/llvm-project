@@ -1905,6 +1905,11 @@ void StmtProfiler::VisitCUDAKernelCallExpr(const CUDAKernelCallExpr *S) {
   VisitCallExpr(S);
 }
 
+void StmtProfiler::VisitDRAIKernelCallExpr(const DRAIKernelCallExpr *S) {
+  llvm_unreachable("drai not implemented");
+  VisitCallExpr(S);
+}
+
 void StmtProfiler::VisitAsTypeExpr(const AsTypeExpr *S) {
   VisitExpr(S);
 }

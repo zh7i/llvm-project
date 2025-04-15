@@ -3532,7 +3532,7 @@ def mthreads : Joined<["-"], "mthreads">, Group<m_Group>, Flags<[NoXarchOption]>
 def mguard_EQ : Joined<["-"], "mguard=">, Group<m_Group>, Flags<[NoXarchOption]>,
   HelpText<"Enable or disable Control Flow Guard checks and guard tables emission">,
   Values<"none,cf,cf-nochecks">;
-def mcpu_EQ : Joined<["-"], "mcpu=">, Group<m_Group>, 
+def mcpu_EQ : Joined<["-"], "mcpu=">, Group<m_Group>,
   HelpText<"For a list of available CPUs for the target use '-mcpu=help'">;
 def mmcu_EQ : Joined<["-"], "mmcu=">, Group<m_Group>;
 def msim : Flag<["-"], "msim">, Group<m_Group>;
@@ -7253,6 +7253,24 @@ def emit_pristine_llvm : DXCFlag<"emit-pristine-llvm">,
   HelpText<"Emit pristine LLVM IR from the frontend by not running any LLVM passes at all."
            "Same as -S + -emit-llvm + -disable-llvm-passes.">;
 def fcgl : DXCFlag<"fcgl">, Alias<emit_pristine_llvm>;
+
+// for target drai
+def fsimd_branch : Flag<["-"], "fsimd-branch">,
+                      HelpText<"Enable SIMD branch">,
+                      MarshallingInfoFlag<LangOpts<"SIMDBranch">>,
+                      Flags<[NoDriverOption, CC1Option]>;
+
+// driver only
+def fdrai_host_only : Flag<["-"], "fdrai-host-only">,
+                      HelpText<"For DRAI host gen">;
+
+// cc1 only, fdrai_is_device = !fdrai_host_only
+def fdrai_is_device : Flag<["-"], "fdrai-is-device">,
+                      HelpText<"Generate code for DRAI device">,
+                      MarshallingInfoFlag<LangOpts<"DRAIIsDevice">>,
+                      Flags<[NoDriverOption, CC1Option]>;
+// end of target drai
+
 def enable_16bit_types : DXCFlag<"enable-16bit-types">, Alias<fnative_half_type>,
   HelpText<"Enable 16-bit types and disable min precision types."
            "Available in HLSL 2018 and shader model 6.2.">;

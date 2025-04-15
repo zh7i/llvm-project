@@ -2059,10 +2059,14 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
         }
 
         if (!LHS.isInvalid()) {
-          ExprResult ECResult = Actions.ActOnCUDAExecConfigExpr(getCurScope(),
-                                    OpenLoc,
-                                    ExecConfigExprs,
-                                    CloseLoc);
+          ExprResult ECResult;
+          if (getLangOpts().DRAI) {
+            ECResult = Actions.ActOnDRAIExecConfigExpr(
+                getCurScope(), OpenLoc, ExecConfigExprs, CloseLoc);
+          } else {
+            ECResult = Actions.ActOnCUDAExecConfigExpr(
+                getCurScope(), OpenLoc, ExecConfigExprs, CloseLoc);
+          }
           if (ECResult.isInvalid())
             LHS = ExprError();
           else

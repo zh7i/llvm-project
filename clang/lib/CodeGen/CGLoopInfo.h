@@ -81,6 +81,9 @@ struct LoopAttributes {
 
   /// Value for whether the loop is required to make progress.
   bool MustProgress;
+
+  /// for target drai
+  LVEnableState DRAIHWLoop;
 };
 
 /// Information used when generating a structured loop.

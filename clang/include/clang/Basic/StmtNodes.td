@@ -294,3 +294,7 @@ def OMPTargetTeamsGenericLoopDirective : StmtNode<OMPLoopDirective>;
 def OMPParallelGenericLoopDirective : StmtNode<OMPLoopDirective>;
 def OMPTargetParallelGenericLoopDirective : StmtNode<OMPLoopDirective>;
 def OMPErrorDirective : StmtNode<OMPExecutableDirective>;
+
+// for target drai
+def DRAIKernelCallExpr : StmtNode<CallExpr>;
+// end of target drai

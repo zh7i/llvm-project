@@ -72,6 +72,10 @@ def disassemble_symbols_EQ : Joined<["--"], "disassemble-symbols=">,
            "Accept demangled names when --demangle is "
            "specified, otherwise accept mangled names">;
 
+// for target drai
+def disassemble_symbols_bin_out_file : Joined<["--"], "bin_out=">,
+  HelpText<"copy .text binary data of the specifyed symbol to the output file. ">;
+
 def disassemble_zeroes : Flag<["--"], "disassemble-zeroes">,
   HelpText<"Do not skip blocks of zeroes when disassembling">;
 def : Flag<["-"], "z">, Alias<disassemble_zeroes>,

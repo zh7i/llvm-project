@@ -58,6 +58,7 @@ add_clang_library(clangDriver
   ToolChains/DragonFly.cpp
   ToolChains/Flang.cpp
   ToolChains/FreeBSD.cpp
+  ToolChains/DRAI.cpp
   ToolChains/Fuchsia.cpp
   ToolChains/Gnu.cpp
   ToolChains/Haiku.cpp

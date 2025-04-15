@@ -56,6 +56,7 @@ public:
     bpfel,          // eBPF or extended BPF or 64-bit BPF (little endian)
     bpfeb,          // eBPF or extended BPF or 64-bit BPF (big endian)
     csky,           // CSKY: csky
+    drai,           // for target drai
     dxil,           // DXIL 32-bit DirectX bytecode
     hexagon,        // Hexagon: hexagon
     loongarch32,    // LoongArch (32-bit): loongarch32
@@ -752,6 +753,11 @@ public:
   bool isOpenHOS() const { return getEnvironment() == Triple::OpenHOS; }
 
   bool isOSLiteOS() const { return getOS() == Triple::LiteOS; }
+
+  /// Tests whether the target is DRAI.
+  bool isDRAI() const {
+    return getArch() == Triple::drai;
+  }
 
   /// Tests whether the target is DXIL.
   bool isDXIL() const {

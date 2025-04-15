@@ -468,6 +468,22 @@ CodeGenTypes::arrangeFunctionDeclaration(const FunctionDecl *FD) {
   return arrangeFreeFunctionType(FTy.castAs<FunctionProtoType>());
 }
 
+const CGFunctionInfo &
+CodeGenTypes::arrangeDRAIDeviceDeclaration(const FunctionDecl *FD) {
+  SmallVector<CanQualType, 16> prefix;
+
+  // device func decl add base mask argument to front
+  const TargetInfo &TI = FD->getASTContext().getTargetInfo();
+  uint32_t simd_width = TI.GetDRAISimdWidth();
+  QualType mask_ty = Context.getVectorType(Context.BoolTy, simd_width,
+                                           VectorType::GenericVector);
+  prefix.push_back(CanQualType::CreateUnsafe(mask_ty)); // copy not reference
+
+  CanQualType FTy = FD->getType()->getCanonicalTypeUnqualified();
+  return ::arrangeLLVMFunctionInfo(*this, false, prefix,
+                                   FTy.getAs<FunctionProtoType>());
+}
+
 /// Arrange the argument and result information for the declaration or
 /// definition of an Objective-C method.
 const CGFunctionInfo &
@@ -535,6 +551,11 @@ CodeGenTypes::arrangeGlobalDeclaration(GlobalDecl GD) {
   if (isa<CXXConstructorDecl>(GD.getDecl()) ||
       isa<CXXDestructorDecl>(GD.getDecl()))
     return arrangeCXXStructorDeclaration(GD);
+
+  // for target drai
+  if (FD->hasAttr<DRAIDeviceAttr>()) {
+    return arrangeDRAIDeviceDeclaration(FD);
+  }
 
   return arrangeFunctionDeclaration(FD);
 }
@@ -708,6 +729,34 @@ CodeGenTypes::arrangeCXXMethodCall(const CallArgList &args,
   return arrangeLLVMFunctionInfo(
       GetReturnType(proto->getReturnType()), /*instanceMethod=*/true,
       /*chainCall=*/false, argTypes, info, paramInfos, required);
+}
+
+RValue CodeGenFunction::EmitDRAIDeviceCallExpr(const CallExpr *CE,
+                                               ReturnValueSlot ReturnValue) {
+  CallArgList Args;
+  // add base mask to args
+  QualType mask_ty = CGM.getContext().getVectorType(
+      CGM.getContext().BoolTy, GetDRAISimdWidth(), VectorType::GenericVector);
+  Args.add(RValue::get(GetCurrSimdMask()), mask_ty);
+
+  // add normal args
+  const FunctionDecl *FD = cast<FunctionDecl>(CE->getCalleeDecl());
+  const FunctionProtoType *FPT = FD->getType()->castAs<FunctionProtoType>();
+  EmitCallArgs(Args, FPT, CE->arguments(), CE->getDirectCallee());
+
+  // get args type
+  auto argTypes = getArgTypesForCall(CGM.getContext(), Args);
+  const auto &FnInfo = CGM.getTypes().arrangeLLVMFunctionInfo(
+      GetReturnType(FPT->getReturnType()), /*instanceMethod=*/false,
+      /*chainCall=*/false, argTypes, FunctionType::ExtInfo(), {},
+      RequiredArgs::All);
+
+  // emit call
+  llvm::FunctionType *Ty = CGM.getTypes().GetFunctionType(FnInfo);
+  CGCallee Callee =
+      CGCallee::forDirect(CGM.GetAddrOfFunction(FD, Ty), GlobalDecl(FD));
+  return EmitCall(FnInfo, Callee, ReturnValue, Args, nullptr,
+                  CE == MustTailCall, CE->getExprLoc());
 }
 
 const CGFunctionInfo &CodeGenTypes::arrangeNullaryFunction() {
